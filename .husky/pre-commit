@@ -1,0 +1,2 @@
+gitleaks git --pre-commit --staged --redact --verbose --no-banner
+npm run precommit
