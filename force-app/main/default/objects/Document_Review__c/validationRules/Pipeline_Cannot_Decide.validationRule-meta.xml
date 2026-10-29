@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Pipeline_Cannot_Decide</fullName>
+    <active>true</active>
+    <description
+  >Separation of duties: whoever created the review (the pipeline) cannot approve or reject it. Second layer behind field permissions.</description>
+    <errorConditionFormula>AND(
+    ISCHANGED(Decision__c),
+    NOT(ISPICKVAL(Decision__c, "Pending")),
+    CreatedById = $User.Id
+)</errorConditionFormula>
+    <errorDisplayField>Decision__c</errorDisplayField>
+    <errorMessage
+  >You can't decide a review you created. A different reviewer must decide.</errorMessage>
+</ValidationRule>

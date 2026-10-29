@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Verdict__c</fullName>
+    <label>Verdict</label>
+    <description
+  >First-pass verdict. API values match the pipeline's output schema.</description>
+    <type>Picklist</type>
+    <required>false</required>
+    <trackHistory>false</trackHistory>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>pass</fullName>
+                <default>false</default>
+                <label>Pass</label>
+            </value>
+            <value>
+                <fullName>wrong_type</fullName>
+                <default>false</default>
+                <label>Wrong Type</label>
+            </value>
+            <value>
+                <fullName>name_mismatch</fullName>
+                <default>false</default>
+                <label>Name Mismatch</label>
+            </value>
+            <value>
+                <fullName>illegible</fullName>
+                <default>false</default>
+                <label>Illegible</label>
+            </value>
+            <value>
+                <fullName>tampering_suspected</fullName>
+                <default>false</default>
+                <label>Tampering Suspected</label>
+            </value>
+            <value>
+                <fullName>needs_human</fullName>
+                <default>false</default>
+                <label>Needs Human</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

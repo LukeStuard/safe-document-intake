@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Document Review</label>
+    <pluralLabel>Document Reviews</pluralLabel>
+    <description
+  >The automated first-pass verdict on one version of a submitted file, and the human decision on it. The pipeline proposes; a different person decides.</description>
+    <nameField>
+        <label>Review Number</label>
+        <type>AutoNumber</type>
+        <displayFormat>DR-{00000}</displayFormat>
+        <startingNumber>1</startingNumber>
+        <trackHistory>false</trackHistory>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>ReadWrite</sharingModel>
+    <externalSharingModel>Private</externalSharingModel>
+    <enableActivities>false</enableActivities>
+    <enableBulkApi>true</enableBulkApi>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <enableSharing>true</enableSharing>
+    <enableStreamingApi>true</enableStreamingApi>
+</CustomObject>

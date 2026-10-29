@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>New_Review_Must_Be_Pending</fullName>
+    <active>true</active>
+    <description
+  >New reviews start Pending, carry a verdict, file version and model, and have no decision stamp.</description>
+    <errorConditionFormula>AND(
+    ISNEW(),
+    OR(
+        NOT(ISPICKVAL(Decision__c, "Pending")),
+        ISBLANK(TEXT(Verdict__c)),
+        ISBLANK(Content_Version_Id__c),
+        ISBLANK(Model__c),
+        NOT(ISBLANK(Decided_By__c)),
+        NOT(ISBLANK(Decided_On__c))
+    )
+)</errorConditionFormula>
+    <errorMessage
+  >A new review must be Pending, include a verdict, file version and model, and have no decision recorded.</errorMessage>
+</ValidationRule>

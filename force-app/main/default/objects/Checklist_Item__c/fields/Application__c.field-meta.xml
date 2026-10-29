@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Application__c</fullName>
+    <label>Application</label>
+    <type>MasterDetail</type>
+    <referenceTo>Application__c</referenceTo>
+    <relationshipName>Checklist_Items</relationshipName>
+    <relationshipLabel>Checklist Items</relationshipLabel>
+    <relationshipOrder>0</relationshipOrder>
+    <reparentableMasterDetail>false</reparentableMasterDetail>
+    <writeRequiresMasterRead>false</writeRequiresMasterRead>
+</CustomField>
