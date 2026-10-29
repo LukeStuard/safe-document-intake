@@ -5,6 +5,11 @@
   >Administrators of the intake objects. Full field access; validation rules still lock verdicts, decisions and the decision stamp. Document reviews cannot be deleted, since they are the audit record.</description>
     <hasActivationRequired>false</hasActivationRequired>
     <fieldPermissions>
+        <editable>false</editable>
+        <field>Application__c.Applicant_Name__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
         <editable>true</editable>
         <field>Checklist_Item__c.Status__c</field>
         <readable>true</readable>
@@ -49,14 +54,14 @@
         <field>Document_Review__c.Decided_On__c</field>
         <readable>true</readable>
     </fieldPermissions>
-        <objectPermissions>
+    <objectPermissions>
         <allowCreate>false</allowCreate>
         <allowDelete>false</allowDelete>
         <allowEdit>false</allowEdit>
         <allowRead>true</allowRead>
         <modifyAllRecords>false</modifyAllRecords>
         <object>Application__c</object>
-        <viewAllRecords>true</viewAllRecords>
+        <viewAllRecords>false</viewAllRecords>
     </objectPermissions>
     <objectPermissions>
         <allowCreate>true</allowCreate>
@@ -65,7 +70,7 @@
         <allowRead>true</allowRead>
         <modifyAllRecords>false</modifyAllRecords>
         <object>Checklist_Item__c</object>
-        <viewAllRecords>true</viewAllRecords>
+        <viewAllRecords>false</viewAllRecords>
     </objectPermissions>
     <objectPermissions>
         <allowCreate>true</allowCreate>

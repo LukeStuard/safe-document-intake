@@ -15,8 +15,16 @@ private class DocumentReviewRulesTest {
   @TestSetup
   static void setup() {
     Profile p = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1];
+    // The pipeline gets the profile its real user will have: one that grants nothing,
+    // so every permission it holds comes from Intake_Integration.
+    Profile minimal = [
+      SELECT Id
+      FROM Profile
+      WHERE Name = 'Minimum Access - Salesforce'
+      LIMIT 1
+    ];
     String suffix = String.valueOf(Math.abs(Crypto.getRandomInteger()));
-    User pipeline = makeUser(p.Id, 'intpipe', 'pipeline' + suffix);
+    User pipeline = makeUser(minimal.Id, 'intpipe', 'pipeline' + suffix);
     User reviewer = makeUser(p.Id, 'intrev', 'reviewer' + suffix);
 
     // Setup objects (users, permission set assignments) go in their own runAs block
@@ -156,6 +164,39 @@ private class DocumentReviewRulesTest {
       'Stamp flow should record the reviewer.'
     );
     Assert.isNotNull(after.Decided_On__c, 'Stamp flow should record the time.');
+  }
+
+  // ---------- Least privilege: applicant data ----------
+
+  @IsTest
+  static void pipelineReadsNameButNotContact() {
+    String name;
+    Boolean contactBlocked = false;
+    Test.startTest();
+    System.runAs(pipelineUser()) {
+      name = [
+        SELECT Applicant_Name__c
+        FROM Application__c
+        WITH USER_MODE
+        LIMIT 1
+      ]
+      .Applicant_Name__c;
+      try {
+        Database.query('SELECT Id FROM Contact LIMIT 1', AccessLevel.USER_MODE);
+      } catch (Exception e) {
+        contactBlocked = true;
+      }
+    }
+    Test.stopTest();
+    Assert.areEqual(
+      'Jordan Whitcombe',
+      name,
+      'Pipeline should read the applicant name through the formula field.'
+    );
+    Assert.isTrue(
+      contactBlocked,
+      'Pipeline user could query Contact; it should have no Contact access at all.'
+    );
   }
 
   // ---------- Finality ----------

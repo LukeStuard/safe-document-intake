@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Applicant_Name__c</fullName>
+    <label>Applicant Name</label>
+    <description
+  >The applicant's name, computed from the related Contact. Lets the intake pipeline read the one value it needs without any access to Contact.</description>
+    <type>Text</type>
+    <formula
+  >TRIM(Applicant__r.FirstName &amp; " " &amp; Applicant__r.LastName)</formula>
+    <formulaTreatBlanksAs>BlankAsBlank</formulaTreatBlanksAs>
+    <unique>false</unique>
+    <trackTrending>false</trackTrending>
+</CustomField>

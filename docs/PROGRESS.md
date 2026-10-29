@@ -73,3 +73,10 @@
 - Finding: this org enforces field permissions on Apex DML. New fields were invisible to the admin until Intake_Admin existed. Tests grant the admin full access so validation rules are proven independently of permissions.
 - Finding: the pipeline user could not see checklist items (sharing inherited from private `Application__c`). Fixed with View All on `Application__c`; field permissions still limit it to the applicant lookup. The tests caught this before any pipeline code existed.
 - Finding: the pipeline is blocked from deciding by three independent layers: no object edit access, no decision field access, and Pipeline_Cannot_Decide. Each is proven by its own test.
+
+- Least privilege on applicant data: added `Application__c.Applicant_Name__c` (formula from the related Contact). Intake_Integration now has explicit `allowRead=false` on Contact and no access to the `Applicant__c` lookup, matching the gateway's rule that integration users never touch Contact.
+- Finding: permission sets only add access. A Standard User profile silently granted Contact read despite Intake_Integration denying it. The test caught it; the pipeline user (in tests and in the org) runs on Minimum Access - Salesforce, so every permission comes from the permission set.
+- Licenses: the org's one Salesforce Integration license belongs to the gateway, so the pipeline user takes a Salesforce license with the Minimum Access profile. Platform licenses were rejected because their standard profile grants Contact read.
+- Sharing differs from the gateway on purpose: View All on `Application__c` instead of a sharing rule that hides Drafts, since a Draft application can still receive documents.
+- Practice: verify permissions by querying the org, not by reading the file. Two edits this project (and one in the gateway) never reached the org.
+- `DocumentReviewRulesTest`: 11/11 passing.
