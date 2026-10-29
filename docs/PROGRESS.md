@@ -55,3 +55,10 @@
 - Confirmed `node_modules/` and `.dev.vars*` are ignored.
 - No MCP in this Worker: the pipeline has no agent-facing surface. Claude reaches review data only through the gateway's MCP server.
 - Phase 0 complete.
+
+## 2026-10-29: Separate Cloudflare token and Workers AI access
+
+- Created a dedicated `safe-document-intake` API token instead of widening the gateway's token. Permissions: Workers Scripts Edit, Workers AI Read, Account Settings Read, User Details Read, Memberships Read. Queues and D1 will be added in Phase 2 when needed.
+- Helper renamed to `scripts/Use-IntakeCloudflare.ps1`, reading the `SafeDocumentIntake-CF` credential.
+- Incident: the credential storage command printed the new token to the terminal. Token rolled within minutes; storage command now pipes to `Out-Null`.
+- Workers AI: `@cf/qwen/qwen3.8-27b` works on the free plan with Workers AI Read only. Test call: 58 input + 35 output tokens = 12.55 neurons, consistent with listed per-token pricing. Reasoning output dominates cost; rough estimate is ~55 single-page documents per day on the free allocation.
