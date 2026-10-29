@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Checklist_Item__c</fullName>
+    <label>Checklist Item</label>
+    <type>Lookup</type>
+    <referenceTo>Checklist_Item__c</referenceTo>
+    <relationshipName>Document_Reviews</relationshipName>
+    <relationshipLabel>Document Reviews</relationshipLabel>
+    <required>true</required>
+    <deleteConstraint>Restrict</deleteConstraint>
+</CustomField>

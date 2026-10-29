@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Decision_Stamp_Is_System</fullName>
+    <active>true</active>
+    <description
+  >Decided By and Decided On are set only by the stamp flow, in the same save as the decision.</description>
+    <errorConditionFormula>AND(
+    NOT(ISNEW()),
+    OR(
+        ISCHANGED(Decided_By__c),
+        ISCHANGED(Decided_On__c)
+    ),
+    NOT(ISCHANGED(Decision__c))
+)</errorConditionFormula>
+    <errorMessage
+  >Decided By and Decided On are recorded automatically and can't be edited.</errorMessage>
+</ValidationRule>

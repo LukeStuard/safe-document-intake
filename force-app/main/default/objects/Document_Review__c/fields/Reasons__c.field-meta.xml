@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Reasons__c</fullName>
+    <label>Reasons</label>
+    <description>Why the first pass reached its verdict.</description>
+    <type>LongTextArea</type>
+    <length>32768</length>
+    <visibleLines>5</visibleLines>
+    <trackHistory>false</trackHistory>
+</CustomField>

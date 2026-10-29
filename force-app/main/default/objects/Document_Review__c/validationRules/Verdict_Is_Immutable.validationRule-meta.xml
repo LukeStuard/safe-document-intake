@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Verdict_Is_Immutable</fullName>
+    <active>true</active>
+    <description
+  >What the first pass said can't be changed by anyone, admins included, so the reviewer decides on exactly what was proposed.</description>
+    <errorConditionFormula>AND(
+    NOT(ISNEW()),
+    OR(
+        ISCHANGED(Checklist_Item__c),
+        ISCHANGED(Content_Version_Id__c),
+        ISCHANGED(Model__c),
+        ISCHANGED(Verdict__c),
+        ISCHANGED(Reasons__c),
+        ISCHANGED(Tampering_Excerpt__c)
+    )
+)</errorConditionFormula>
+    <errorMessage
+  >The first-pass verdict can't be edited. Decide the review instead.</errorMessage>
+</ValidationRule>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Content_Version_Id__c</fullName>
+    <label>Content Version Id</label>
+    <description
+  >The file version this review covers. Unique, so a replayed job cannot create a second review of the same version.</description>
+    <type>Text</type>
+    <length>18</length>
+    <required>true</required>
+    <unique>true</unique>
+    <caseSensitive>true</caseSensitive>
+    <externalId>true</externalId>
+    <trackHistory>false</trackHistory>
+</CustomField>
