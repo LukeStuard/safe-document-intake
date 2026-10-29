@@ -62,3 +62,14 @@
 - Helper renamed to `scripts/Use-IntakeCloudflare.ps1`, reading the `SafeDocumentIntake-CF` credential.
 - Incident: the credential storage command printed the new token to the terminal. Token rolled within minutes; storage command now pipes to `Out-Null`.
 - Workers AI: `@cf/qwen/qwen3.8-27b` works on the free plan with Workers AI Read only. Test call: 58 input + 35 output tokens = 12.55 neurons, consistent with listed per-token pricing. Reasoning output dominates cost; rough estimate is ~55 single-page documents per day on the free allocation.
+
+## 2026-10-29: Phase 1 data model and enforced review rules
+
+- Deployed `Checklist_Item__c` (master-detail to `Application__c`) and `Document_Review__c`, following the gateway's `Review_Note_Request__c` patterns.
+- Six validation rules: New_Review_Must_Be_Pending, Decision_Is_Final (decision and note), Pipeline_Cannot_Decide, Verdict_Is_Immutable (applies to admins), Decision_Stamp_Is_System, Rejection_Needs_Note. Stamp flow records Decided_By/Decided_On before save.
+- Permission sets: Intake_Integration (create reviews, read applicant name only), Intake_Reviewer (decision and note only), Intake_Admin (full field access, no deleting reviews).
+- Correct eval verdicts will live in `eval/manifest.json`, not Salesforce, so the pipeline user can never read the answer key.
+- `DocumentReviewRulesTest`: 10/10 passing.
+- Finding: this org enforces field permissions on Apex DML. New fields were invisible to the admin until Intake_Admin existed. Tests grant the admin full access so validation rules are proven independently of permissions.
+- Finding: the pipeline user could not see checklist items (sharing inherited from private `Application__c`). Fixed with View All on `Application__c`; field permissions still limit it to the applicant lookup. The tests caught this before any pipeline code existed.
+- Finding: the pipeline is blocked from deciding by three independent layers: no object edit access, no decision field access, and Pipeline_Cannot_Decide. Each is proven by its own test.
