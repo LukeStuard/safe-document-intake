@@ -1,3 +1,7 @@
+Safe Document Intake: Project Brief
+
+Working name. Repo name suggestion: safe-document-intake, as a companion to safe-agent-gateway.
+
 The pitch
 
 A serverless pipeline that moves applicant documents from Salesforce into Google Drive, with an AI agent that checks each document before a human ever opens it. The agent reads every upload, decides whether it matches the checklist item it was filed under and the applicant it belongs to, and proposes a verdict. It never rejects, deletes, or changes anything on its own. A person makes every final call, and Salesforce enforces that.
@@ -42,7 +46,7 @@ Compute Cloudflare Workers Same platform as the gateway
 Async work Cloudflare Queues, with a dead-letter queue Retries and failure isolation without hand-rolled code
 Audit log Cloudflare D1 Proven pattern from the gateway
 Destination Google Drive (primary), Cloudflare R2 (fallback) Free; R2 lets anyone clone and run it with no Google setup
-First-pass AI Workers AI (primary), Gemini free tier (comparison) Both free within limits; to be verified in Phase 0
+First-pass AI Gemini 3.5 Flash Lite (primary), Gemini 3.8 Flash (spot check), Workers AI (comparison) Free tier, verified in Phase 0: Flash-Lite reads text and scanned PDFs natively, 500 requests/day
 Reviewer assistant Claude in claude.ai (Pro), through the gateway Covered by the existing subscription; no API billing
 Data generation Python, seeded Reproducible synthetic records and PDFs
 Architecture
@@ -67,7 +71,13 @@ Adapters
 Two swappable interfaces keep the core pipeline independent of vendors:
 
 Storage adapter: GoogleDriveStorage and R2Storage. A SharePoint adapter can be added later without touching the pipeline.
-Model adapter: WorkersAiReviewer and GeminiReviewer. Same input, same output schema, so they can be compared head to head.
+Model adapter: GeminiReviewer and WorkersAiReviewer. Same input, same output schema, so they can be compared head to head. Model versions are pinned (never a "latest" alias) so eval results stay reproducible.
+Model selection (decided in Phase 0)
+Primary: gemini-3.5-flash-lite. Free tier limits are 15 requests per minute and 500 per day. Reads PDFs natively, including image-only scans; about 550 prompt tokens per page.
+Spot check: gemini-3.8-flash. Free tier allows only 20 requests per day, so it runs on the hardest dozen eval documents to answer "does a bigger model catch more?"
+Comparison: Workers AI. Its models do not accept PDFs, so this path uses toMarkdown text extraction plus a vision model for image-only documents. Text extraction sees hidden text (white-on-white, tiny fonts) that a vision reader cannot, so comparing which injections each path catches is a planned result.
+Pacing: the queue consumer processes documents one at a time and stays under 15 requests per minute.
+Free-tier Gemini content may be used to improve Google's products. Acceptable for synthetic data; stated in the write-up.
 Google Drive auth
 No service account. Service accounts have no storage quota of their own, so they cannot upload into a personal Drive, and Shared Drives require paid Workspace.
 OAuth as the project owner, drive.file scope only. The app can see and manage only the files it created, not the rest of the Drive. This is the least-privilege equivalent of SharePoint's Sites.Selected.
@@ -122,6 +132,7 @@ Agent output Strict schema, fixed verdicts, invalid output fails closed Improper
 Agent power No tools, no write access, verdicts are proposals Excessive Agency Agent output has no path to change Salesforce or Drive beyond the review record
 Human review Salesforce enforces decider rules and finality Excessive Agency Integration user cannot approve; decided reviews cannot change
 Model usage Per-day caps on model calls and document size Unbounded Consumption Oversized and over-quota jobs are rejected and logged
+Model rate limit Queue consumer paced under the provider's per-minute limit Unbounded Consumption A burst of 30 documents never exceeds 15 model calls per minute
 Drive access drive.file scope only (least privilege) App cannot list or read files it did not create
 Retries Idempotency on document version ID (reliability) Replayed job does not create a duplicate upload or review
 Audit Fail-closed logging (accountability) Broken audit table stops the pipeline
@@ -195,9 +206,10 @@ A custom user interface (Salesforce is the review screen)
 SharePoint (left as a future adapter)
 Paid tiers of anything
 Open questions for Phase 0
-Which Workers AI vision models are currently available, and do any accept PDFs directly?
-What are the current free-tier limits for Workers AI and Gemini, and are they enough for several runs of the 50-document eval set?
-Gemini's free tier may use prompts to improve Google's products. Fine for synthetic data, but worth stating in the write-up.
+Do any models read PDFs directly, including scans? Answered: Gemini Flash-Lite does; Workers AI models do not.
+Free-tier limits? Answered: Flash-Lite 500/day, Flash 20/day. Workers AI's free allocation is 10,000 Neurons/day.
+Is qwen3.8-27b (Workers AI vision) available on the free plan? Needs one test call.
+Does gitleaks detect Gemini's new AQ. key format? Test with a fake key; add a custom rule if not.
 Can a Developer Edition flow make signed HTTP callouts through a Named Credential the way this design needs, or does it need a small Apex helper?
 Can a claude.ai custom connector pass a PDF or image from a tool result into Claude's view? If not, Claude works from extracted text and the first-pass verdict.
 Does the Developer Edition org have room for the dozen demo documents? (File storage limits are small on Developer Edition; the eval set stays outside the org.)
