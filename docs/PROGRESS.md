@@ -27,3 +27,22 @@
 - Hello-world Worker deployed to the personal Cloudflare account
 - Confirm current Workers AI and Gemini free-tier limits and PDF/image support
 - Confirm a Developer Edition flow can make the signed callout, or plan an Apex helper
+
+## Phase 0: Gemini model selection (2026-10-29)
+
+- Gemini API key on the personal Google account, project safe-document-intake, free tier, no billing
+  - A first key was accidentally created under a university Google account (AI Studio defaulted to the
+    browser's first signed-in account); it was deleted, along with a second key auto-created in a
+    "Default Gemini Project". One live key remains, attached to safe-document-intake
+  - Key stored in Credential Manager (SafeDocumentIntake-Gemini) via the Get-Credential dialog;
+    clipboard cleared after storing; sent as an x-goog-api-key header, never in a URL
+  - New key format (AQ. prefix, 53 chars): confirm gitleaks detects it before committing Gemini code
+- Free-tier limits from AI Studio: Flash models 5 RPM / 20 RPD; Flash-Lite 15 RPM / 500 RPD
+- Decision: gemini-3.5-flash-lite as the primary reviewer, pinned by version (not the "latest" alias,
+  so eval results stay reproducible); gemini-3.8-flash as a spot check on the hardest documents
+- Design consequence: the queue consumer must pace calls to stay under 15 requests per minute
+- PDF test, text PDF: correct name, institution, GPA: PASS
+- PDF test, image-only scan (no text layer, noise, slight rotation): correct name, institution, GPA: PASS
+  - Both used 545 prompt tokens, so scans cost the same as text PDFs
+  - Free-text fields drifted between the two copies ("unofficial academic transcript" vs
+    "transcript"), supporting fixed-verdict output over free-text descriptions
