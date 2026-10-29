@@ -46,3 +46,12 @@
   - Both used 545 prompt tokens, so scans cost the same as text PDFs
   - Free-text fields drifted between the two copies ("unofficial academic transcript" vs
     "transcript"), supporting fixed-verdict output over free-text descriptions
+
+## 2026-10-29: Worker scaffold and first deploy
+
+- Scaffolded `worker/` with C3 (hello-world, TypeScript, no nested git), AGENTS.md included to match the gateway.
+- Wrangler 4.156.0. Vitest and the Cloudflare Vitest plugin kept, for the safety tests.
+- Renamed to `safe-document-intake`; deployed to the gateway's Cloudflare account and confirmed the hello-world response.
+- Confirmed `node_modules/` and `.dev.vars*` are ignored.
+- No MCP in this Worker: the pipeline has no agent-facing surface. Claude reaches review data only through the gateway's MCP server.
+- Phase 0 complete.
