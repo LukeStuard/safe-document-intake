@@ -6,6 +6,11 @@
     <hasActivationRequired>false</hasActivationRequired>
     <fieldPermissions>
         <editable>false</editable>
+        <field>Application__c.Applicant_Name__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>Application__c.Applicant__c</field>
         <readable>true</readable>
     </fieldPermissions>
