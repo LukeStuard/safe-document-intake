@@ -80,3 +80,26 @@
 - Sharing differs from the gateway on purpose: View All on `Application__c` instead of a sharing rule that hides Drafts, since a Draft application can still receive documents.
 - Practice: verify permissions by querying the org, not by reading the file. Two edits this project (and one in the gateway) never reached the org.
 - `DocumentReviewRulesTest`: 11/11 passing.
+
+## 2026-10-29: Pipeline integration user and client credentials
+
+- User `intake.pipeline@safe-document-intake.dev`: Salesforce license, Minimum Access - Salesforce profile, Intake_Integration only (now with API Enabled, verified by query).
+- External Client App "Safe Document Intake Pipeline", separate from the gateway's apps (one app per trust boundary): client credentials only, scope `api` only, Run As the pipeline user. Consumer key and secret in Credential Manager (`SafeDocumentIntake-SF`).
+- Live checks as the pipeline user, through a real client-credentials token:
+  - Token scope `api` only: PASS
+  - `Applicant_Name__c` readable through the formula: PASS
+  - Contact query returns `INVALID_TYPE`: PASS
+  - Document_Review__c describe: createable True, updateable False, deletable False: PASS
+- Tightened Permitted Users to admin-approved with only Intake_Integration approved; token still issues: PASS
+
+## 2026-10-29: Eval set generated and loaded
+
+- `eval/generate.py` (seed 20261029): 20 applications sampled from the org's 210 non-Draft records, 100 checklist items, 60 documents: 20 good (about 30% as image-only scans), 8 wrong type, 8 name mismatch (using another real applicant's name), 8 illegible (blank, faded and noisy, low resolution), 16 injection fixtures across five styles (visible, white text, 1-point text, PDF metadata, fake registrar's note).
+- Output is byte-for-byte reproducible. Pinned reportlab invariant mode and Pillow 13's PDF timestamps.
+- `eval/manifest.json` is the answer key, kept in the repo and never in Salesforce. Each injection records whether it is visible in the rendered image, the text layer, or neither.
+- File names and PDF metadata are neutral (`doc-NNNN.pdf`, title "Document") so the category can't be inferred from them.
+- Reviewed the synthetic documents before loading and fixed three problems that would have scored correct model judgments as errors: transcript course dates outside the degree years, a GPA unrelated to the grades shown, and the watermark drawn over injected text. The faded-scan style was also still readable on first pass and was made truly illegible.
+- `eval/load.py` creates checklist items in one all-or-nothing request and attaches files as the admin. It refuses to load twice.
+- Finding: the sf CLI now redacts access tokens in `org display --json`. The loader was rewritten to make every call through `sf api request rest`, so it never handles a token.
+- Verified in the org: 60 Received, 40 Not Received, 60 files attached.
+- Phase 1 complete.
