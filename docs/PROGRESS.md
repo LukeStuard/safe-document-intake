@@ -103,3 +103,14 @@
 - Finding: the sf CLI now redacts access tokens in `org display --json`. The loader was rewritten to make every call through `sf api request rest`, so it never handles a token.
 - Verified in the org: 60 Received, 40 Not Received, 60 files attached.
 - Phase 1 complete.
+
+## 2026-10-30: Signed trigger, Worker side
+
+- Signing secret: 32 random bytes, generated straight into Credential Manager (`SafeDocumentIntake-Signing`) and piped into the Worker secret `SF_SIGNING_KEY`. Never displayed or written to a file. `GatewayCredential.ps1` gained `Set-GatewayCredential` (Win32 `CredWrite`) to make that possible.
+- Salesforce side will sign with a Named Credential custom header formula: `HMAC('SHA-256', $Credential.<ext>.Body, BLOB(key))`. Apex never sees the secret, and principal parameter values aren't deployable metadata, so it never reaches git.
+- `POST /hooks/salesforce` verifies before parsing: size limit (4 KB), signature over the raw bytes with `crypto.subtle.verify` (constant-time), then payload shape (18-character IDs, `068` prefix on the ContentVersion), then a 5-minute timestamp window, past or future.
+- Every rejection returns the same bare 401. The reason is logged; nothing from an unverified body is.
+- Key is trimmed before use, in case the PowerShell pipe added a newline. Tested.
+- Finding: the `create-cloudflare` scaffold's sample test used the retired `SELF` binding. Current `@cloudflare/vitest-plugin` uses `exports.default.fetch()` from `cloudflare:workers`. Replaced.
+- 25 tests passing (20 unit, 5 integration). Tests use a fake key from the Vitest config.
+- Next: nonce replay protection in D1.
