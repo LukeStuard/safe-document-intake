@@ -57,3 +57,6 @@ $RECYCLE.BIN/
 # Eval output
 eval/out/
 eval/scratch/
+eval/.venv/
+eval/out/
+eval/applications.json
