@@ -14,6 +14,10 @@ describe("verifySalesforceRequest", () => {
 	it("accepts a correctly signed, current, well-formed request", async () => {
 		const result = await check(payload(NOW));
 		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.payload.ts).toBe(NOW);
+			expect(result.payload.contentVersionId).toBe("068000000000001AAA");
+		}
 	});
 
 	it("trims a trailing newline from the stored key", async () => {
@@ -56,22 +60,29 @@ describe("verifySalesforceRequest", () => {
 	});
 
 	it("rejects an oversized body even when signed", async () => {
-		const big = payload(NOW, { padding: "x".repeat(MAX_BODY_BYTES) });
+		const big = `${payload(NOW)}|${"x".repeat(MAX_BODY_BYTES)}`;
 		expect(await check(big)).toEqual({ ok: false, reason: "body_size" });
 	});
 
-	it("rejects a signed body that isn't JSON", async () => {
-		expect(await check("hello")).toEqual({ ok: false, reason: "body_not_json" });
+	it("rejects a signed body in the old JSON format", async () => {
+		const json = JSON.stringify({ v: 1, ts: NOW, nonce: crypto.randomUUID() });
+		expect(await check(json)).toEqual({ ok: false, reason: "payload_shape" });
+	});
+
+	it("rejects a signed body with an extra field", async () => {
+		expect(await check(`${payload(NOW)}|extra`)).toEqual({ ok: false, reason: "payload_shape" });
 	});
 
 	it.each([
 		["wrong version", { v: 2 }],
-		["string timestamp", { ts: String(NOW) }],
-		["fractional timestamp", { ts: NOW + 0.5 }],
+		["non-numeric timestamp", { ts: "soon" }],
+		["fractional timestamp", { ts: "1800000000.5" }],
+		["negative timestamp", { ts: "-1800000000" }],
 		["short nonce", { nonce: "abc" }],
+		["nonce with a quote", { nonce: "aaaaaaaaaaaaaaaa'" }],
 		["15-character ID", { contentVersionId: "068000000000001" }],
 		["non-ContentVersion prefix", { contentVersionId: "069000000000001AAA" }],
-		["missing checklist item", { checklistItemId: undefined }],
+		["empty checklist item", { checklistItemId: "" }],
 	])("rejects a signed payload with %s", async (_label, overrides) => {
 		expect(await check(payload(NOW, overrides))).toEqual({ ok: false, reason: "payload_shape" });
 	});

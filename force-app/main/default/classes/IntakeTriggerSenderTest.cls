@@ -1,8 +1,8 @@
 @IsTest
 private class IntakeTriggerSenderTest {
   // Records every callout instead of sending it. Apex tests can't reach the network,
-  // and the Named Credential's signature formula isn't evaluated in tests, so these
-  // tests prove what gets sent and when. The signature is proven end to end in the org.
+  // and Named Credential formulas aren't evaluated in tests, so these tests prove what
+  // gets sent and when. The signature itself is proven end to end in the org.
   private class CaptureMock implements HttpCalloutMock {
     final Integer status;
     final List<HttpRequest> requests = new List<HttpRequest>();
@@ -56,8 +56,18 @@ private class IntakeTriggerSenderTest {
     return version;
   }
 
-  private static Map<String, Object> body(HttpRequest request) {
-    return (Map<String, Object>) JSON.deserializeUntyped(request.getBody());
+  private static List<String> fields(HttpRequest request) {
+    return request.getBody().split('\\|');
+  }
+
+  private static IntakeTriggerSender.Target fakeTarget() {
+    return new IntakeTriggerSender.Target(
+      Id.valueOf('068000000000001'),
+      Id.valueOf(
+        Checklist_Item__c.SObjectType.getDescribe().getKeyPrefix() +
+        '000000000001'
+      )
+    );
   }
 
   @IsTest
@@ -81,12 +91,14 @@ private class IntakeTriggerSenderTest {
       sent.getEndpoint()
     );
     Assert.areEqual('POST', sent.getMethod());
-    Assert.areEqual('application/json', sent.getHeader('Content-Type'));
+    Assert.areEqual('text/plain', sent.getHeader('Content-Type'));
     Assert.areEqual(
-      String.valueOf(version.Id),
-      body(sent).get('contentVersionId')
+      IntakeTriggerSender.signatureFormula(sent.getBody()),
+      sent.getHeader('X-Intake-Signature'),
+      'The header signs exactly the body that is sent'
     );
-    Assert.areEqual(String.valueOf(itemId), body(sent).get('checklistItemId'));
+    Assert.areEqual(String.valueOf(version.Id), fields(sent)[3]);
+    Assert.areEqual(String.valueOf(itemId), fields(sent)[4]);
   }
 
   @IsTest
@@ -129,13 +141,10 @@ private class IntakeTriggerSenderTest {
     insert second;
     Test.stopTest();
 
-    Set<Object> sentVersions = new Set<Object>();
+    Set<String> sentVersions = new Set<String>();
     for (HttpRequest request : mock.requests) {
-      sentVersions.add(body(request).get('contentVersionId'));
-      Assert.areEqual(
-        String.valueOf(itemId),
-        body(request).get('checklistItemId')
-      );
+      sentVersions.add(fields(request)[3]);
+      Assert.areEqual(String.valueOf(itemId), fields(request)[4]);
     }
     Assert.areEqual(
       2,
@@ -147,48 +156,68 @@ private class IntakeTriggerSenderTest {
   }
 
   @IsTest
-  static void bodyCarriesVersionTimestampFreshNonceAndFullIds() {
-    IntakeTriggerSender.Target t = new IntakeTriggerSender.Target(
-      Id.valueOf('068000000000001'),
-      Id.valueOf(
-        Checklist_Item__c.SObjectType.getDescribe().getKeyPrefix() +
-        '000000000001'
-      )
-    );
+  static void payloadCarriesVersionTimestampFreshNonceAndFullIds() {
+    List<String> a = IntakeTriggerSender.buildPayload(fakeTarget(), 1800000000L)
+      .split('\\|');
+    List<String> b = IntakeTriggerSender.buildPayload(fakeTarget(), 1800000000L)
+      .split('\\|');
 
-    Map<String, Object> a = (Map<String, Object>) JSON.deserializeUntyped(
-      IntakeTriggerSender.buildBody(t, 1800000000L)
-    );
-    Map<String, Object> b = (Map<String, Object>) JSON.deserializeUntyped(
-      IntakeTriggerSender.buildBody(t, 1800000000L)
-    );
+    Assert.areEqual(5, a.size());
+    Assert.areEqual('1', a[0]);
+    Assert.areEqual('1800000000', a[1]);
+    Assert.areEqual(36, a[2].length(), 'UUID nonce');
+    Assert.areNotEqual(a[2], b[2], 'Every request gets a new nonce');
+    Assert.areEqual(18, a[3].length(), 'Worker requires 18-character IDs');
+    Assert.areEqual(18, a[4].length());
+  }
 
-    Assert.areEqual(1, a.get('v'));
-    Assert.areEqual(1800000000L, (Long) a.get('ts'));
-    Assert.areEqual(36, ((String) a.get('nonce')).length(), 'UUID nonce');
-    Assert.areNotEqual(
-      a.get('nonce'),
-      b.get('nonce'),
-      'Every request gets a new nonce'
+  @IsTest
+  static void formulaSignsThePayloadWithTheStoredKeyReference() {
+    String payload = IntakeTriggerSender.buildPayload(
+      fakeTarget(),
+      1800000000L
     );
-    Assert.areEqual(
-      18,
-      ((String) a.get('contentVersionId')).length(),
-      'Worker requires 18-character IDs'
+    String formula = IntakeTriggerSender.signatureFormula(payload);
+
+    Assert.isTrue(
+      formula.contains('BLOB(\'' + payload + '\')'),
+      'Payload is the signed literal'
     );
-    Assert.areEqual(18, ((String) a.get('checklistItemId')).length());
+    Assert.isTrue(
+      formula.contains('$Credential.Intake_Signing.SigningKey'),
+      'Key is referenced, never embedded'
+    );
+  }
+
+  @IsTest
+  static void unsafePayloadsAreRefusedBeforeBuildingAFormula() {
+    for (
+      String unsafe : new List<String>{
+        '1|x\'|y',
+        '1|}|y',
+        '1|{!$Api}|y',
+        '1|a b|c',
+        null
+      }
+    ) {
+      try {
+        IntakeTriggerSender.signatureFormula(unsafe);
+        Assert.fail('Should refuse: ' + unsafe);
+      } catch (IllegalArgumentException e) {
+        Assert.isNotNull(e.getMessage());
+      }
+    }
   }
 
   @IsTest
   static void duplicateTargetsInOneTransactionAreSentOnce() {
     CaptureMock mock = new CaptureMock(202);
     Test.setMock(HttpCalloutMock.class, mock);
-    ContentVersion version;
     Id itemId = item().Id;
 
     Test.startTest();
     // Created without a parent so it doesn't send on its own.
-    version = new ContentVersion(
+    ContentVersion version = new ContentVersion(
       Title = 'x',
       PathOnClient = 'x.pdf',
       VersionData = Blob.valueOf('x')

@@ -124,3 +124,15 @@
 - Only verified requests are recorded, so unsigned traffic can't fill the table. Nonces older than 10 minutes are pruned after each accepted request.
 - If D1 is unavailable, the Worker fails closed with 503 rather than accepting a request it can't check for replay.
 - Tests run against a local D1 with the same migration applied. 30 passing.
+
+## 2026-10-30: Signed trigger, end to end
+
+- Salesforce side: `ContentDocumentLink` trigger (file attached) and `ContentVersion` trigger (new version), both feeding `IntakeTriggerSender`, a Queueable that sends IDs only, in batches of 20 at a 5-second timeout. Best-effort; failures logged with record IDs. A scheduled reconciler (later) will cover failed sends and backfill. 9 Apex tests; 100% on the handler and triggers.
+- Finding: the documented `$Credential.<name>.Body` formula field doesn't resolve in this org ("Field Intake_Signing.Body does not exist"), whether the header is set on the External Credential or from Apex, with body formulas on or off. Proven with debug logs, not assumed.
+- Proved the rest of the formula independently with anonymous Apex probes: `SigningKey` resolves and `HMAC` evaluates (`signature_invalid` on a mismatched body), then a matched probe passed the Worker's signature check, proving Salesforce's HMAC matches the Worker's byte for byte.
+- Fix: the body is now plain text, `v|ts|nonce|contentVersionId|checklistItemId`, and Apex puts that exact string into the formula as a literal. The signature still covers the raw body and the Worker still verifies before parsing, so no rule changed. The key never reaches Apex.
+- Guard: Apex refuses to build a formula from any payload containing characters other than letters, digits, hyphens and pipes, so a value can never break out of the formula literal. Tested with quotes, braces and `{!`.
+- Worker: rejects any payload that isn't exactly five well-formed fields, including the old JSON format. Decodes strictly as UTF-8 and keeps a byte-order mark so it fails the check. 33 Worker tests.
+- Near miss: a terminal without the intake token loaded fell back to a stale Wrangler OAuth login for CIAM's Cloudflare account. The deploy failed only because the D1 binding pointed at a database in the personal account. Confirmed nothing was created there. Fix: `account_id` pinned in `wrangler.jsonc`, so deploys from any other login are refused.
+- Checklist Item layout: Files and Document Reviews related lists added. Notes & Attachments deliberately left off, since legacy attachments would bypass the Files triggers.
+- Live result: a new file version uploaded in the UI produced `hook_accepted` at the Worker, with its nonce recorded in D1.
