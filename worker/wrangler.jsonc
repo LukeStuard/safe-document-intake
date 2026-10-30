@@ -5,6 +5,7 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "safe-document-intake",
+	"account_id": "e0c21530d52ee1a25cbb8a6853b02168",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-10-23",
 	"observability": {
