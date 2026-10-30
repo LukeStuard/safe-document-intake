@@ -1,9 +1,10 @@
 import { verifySalesforceRequest } from "./verify";
+import { recordNonce, pruneNonces } from "./nonces";
 
 type IntakeEnv = Env & { SF_SIGNING_KEY: string };
 
 export default {
-	async fetch(request, env): Promise<Response> {
+	async fetch(request, env, ctx): Promise<Response> {
 		const { pathname } = new URL(request.url);
 
 		if (pathname !== "/hooks/salesforce") {
@@ -20,16 +21,34 @@ export default {
 			return new Response(null, { status: 401 });
 		}
 
-		// Salesforce record IDs only, never names or file contents.
-		console.log(
-			JSON.stringify({
-				event: "hook_accepted",
-				contentVersionId: result.payload.contentVersionId,
-				checklistItemId: result.payload.checklistItemId,
-			}),
+		const { contentVersionId, checklistItemId, nonce } = result.payload;
+		const now = Math.floor(Date.now() / 1000);
+
+		let nonceStatus: "new" | "replay";
+		try {
+			nonceStatus = await recordNonce(env.AUDIT_DB, nonce, now);
+		} catch {
+			// Can't check for replay, so don't accept. 503 tells Salesforce to retry later.
+			console.error(JSON.stringify({ event: "nonce_store_error" }));
+			return new Response(null, { status: 503 });
+		}
+
+		if (nonceStatus === "replay") {
+			// Verified IDs are safe to log, and useful: a replay means a signed request was captured.
+			console.warn(JSON.stringify({ event: "hook_replay", contentVersionId, checklistItemId }));
+			return new Response(null, { status: 401 });
+		}
+
+		ctx.waitUntil(
+			pruneNonces(env.AUDIT_DB, now).catch(() =>
+				console.error(JSON.stringify({ event: "nonce_prune_error" })),
+			),
 		);
 
-		// Replay protection (nonce in D1) and queueing come next. Until then, accepted means verified only.
+		// Salesforce record IDs only, never names or file contents.
+		console.log(JSON.stringify({ event: "hook_accepted", contentVersionId, checklistItemId }));
+
+		// Queueing comes next. Until then, accepted means verified and not a replay.
 		return new Response(null, { status: 202 });
 	},
 } satisfies ExportedHandler<IntakeEnv>;

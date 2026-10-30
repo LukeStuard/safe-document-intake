@@ -114,3 +114,13 @@
 - Finding: the `create-cloudflare` scaffold's sample test used the retired `SELF` binding. Current `@cloudflare/vitest-plugin` uses `exports.default.fetch()` from `cloudflare:workers`. Replaced.
 - 25 tests passing (20 unit, 5 integration). Tests use a fake key from the Vitest config.
 - Next: nonce replay protection in D1.
+
+## 2026-10-30: Replay protection
+
+- Added D1: Edit to the intake Cloudflare token (one permission, logged here). Token still has no expiry or IP filter; noted for the hardening list.
+- Finding: D1 token permissions are account-wide, so the intake token can also reach `gateway-audit`. The intake Worker can't, since a Worker only reaches databases bound to it. Separate Cloudflare accounts would be the real fix; noted for the hardening list.
+- New database `intake-audit`, bound as `AUDIT_DB` to match the gateway. Migration `0001_init_nonces.sql` creates `seen_nonces`.
+- Each verified request's nonce is recorded with one atomic `INSERT ... ON CONFLICT DO NOTHING`, so there's no gap where two copies of a request both pass. A repeat gets the same bare 401.
+- Only verified requests are recorded, so unsigned traffic can't fill the table. Nonces older than 10 minutes are pruned after each accepted request.
+- If D1 is unavailable, the Worker fails closed with 503 rather than accepting a request it can't check for replay.
+- Tests run against a local D1 with the same migration applied. 30 passing.

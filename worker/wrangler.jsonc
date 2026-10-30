@@ -10,7 +10,15 @@
 	"observability": {
 		"enabled": true
 	},
-	"upload_source_maps": true
+	"upload_source_maps": true,
+	"d1_databases": [
+		{
+			"binding": "AUDIT_DB",
+			"database_name": "intake-audit",
+			"database_id": "a31aa7bc-f2da-4240-bd78-bd8e69391ef6"
+		}
+	]
+	
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
