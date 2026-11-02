@@ -156,3 +156,13 @@
 - File linked to nothing (made for the test, then deleted): metadata and download both `404 NOT_FOUND`: PASS. To the pipeline, files outside applications don't exist.
 - Finding: an unfiltered `ContentVersion` count returned 0 for the pipeline even though it can open application files by ID. Counts only show files a user owns, so it is no proof of scope; removed from the script. The by-ID negative test is the real check.
 - Finding: every file in the org was already on a checklist item, so the negative case needed a purpose-made file.
+
+## 2026-11-02: Consumer downloads from Salesforce
+
+- Worker secrets `SF_CLIENT_ID`, `SF_CLIENT_SECRET` and `SF_INSTANCE_URL` piped from Credential Manager (`SafeDocumentIntake-SF`) and `sf org display`, never displayed. The instance URL is a secret too, to keep the login endpoint out of the public repo. `SF_API_VERSION` is a plain var.
+- `src/salesforce.ts`: client-credentials token and `VersionData` download. Each failure is classed as retryable (429, 5xx, network) or not (404, other 4xx, missing token). Files over 10 MB are refused, from the declared length when there is one, before reading.
+- `src/consumer.ts`: retryable failures go back to the queue; others are acknowledged and given up on. Anything unexpected is retried and logged by error type only, never its message. The last log line for a job carries `final: true`, which the D1 audit write will hang off.
+- Bug caught by a test: the token URL was built inside the `try`, so a missing setting was reported as "Salesforce unavailable". Moved out.
+- Incident: `SF_API_VERSION` was set to `68` instead of `68.0`. Salesforce answers 404 for an unknown version, so the live job was logged as `file_not_found` and given up on. It failed safe (one attempt, no retries), and the probe script proved the file was fine. Fix: the version is validated before any request, so a bad setting now surfaces as a bug, not a missing file. Pinned by a test.
+- Verified live: an upload produced `job_downloaded` with 1,446,659 bytes on attempt 1, matching the file's `ContentSize` from the probe.
+- 71 tests passing.

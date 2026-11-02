@@ -1,8 +1,9 @@
 import { env, exports } from "cloudflare:workers";
-import { createExecutionContext, waitOnExecutionContext, createMessageBatch, getQueueResult } from "cloudflare:test";
+import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
 import worker from "../src/index";
 import { sign, payload, hookRequest, HOOK_URL } from "./helpers";
+import type { IntakeEnv } from "../src/index";
 
 const testEnv = env as unknown as { SF_SIGNING_KEY: string; AUDIT_DB: D1Database };
 const KEY = testEnv.SF_SIGNING_KEY;
@@ -71,7 +72,7 @@ describe("replay protection", () => {
 
 		const response = await worker.fetch(
 			hookRequest(body, await sign(body, KEY)) as Request<unknown, IncomingRequestCfProperties>,
-			{ ...testEnv, AUDIT_DB: brokenDb } as unknown as Env & { SF_SIGNING_KEY: string },
+			{ ...testEnv, AUDIT_DB: brokenDb } as unknown as IntakeEnv,
 			ctx,
 		);
 		await waitOnExecutionContext(ctx);
@@ -98,7 +99,7 @@ async function runWorker(body: string, signature: string, overrides: Record<stri
 	const ctx = createExecutionContext();
 	const response = await worker.fetch(
 		hookRequest(body, signature) as Request<unknown, IncomingRequestCfProperties>,
-		{ ...testEnv, ...overrides } as unknown as Env & { SF_SIGNING_KEY: string },
+		{ ...testEnv, ...overrides } as unknown as IntakeEnv,
 		ctx,
 	);
 	await waitOnExecutionContext(ctx);
@@ -147,30 +148,3 @@ describe("queueing", () => {
 	
 });
 
-const GOOD_JOB = {
-	v: 1,
-	contentVersionId: "068000000000001AAA",
-	checklistItemId: "a01000000000001AAA",
-	acceptedAt: 1767225600,
-};
-
-async function runConsumer(body: unknown) {
-	const batch = createMessageBatch("intake-documents", [{ id: "msg-1", timestamp: new Date(), attempts: 1, body }]);
-	const ctx = createExecutionContext();
-	await worker.queue!(batch, testEnv as unknown as Env & { SF_SIGNING_KEY: string }, ctx);
-	return getQueueResult(batch, ctx);
-}
-
-describe("queue consumer", () => {
-	it("acknowledges a well-formed job", async () => {
-		const result = await runConsumer(GOOD_JOB);
-		expect(result.explicitAcks).toEqual(["msg-1"]);
-		expect(result.retryMessages).toEqual([]);
-	});
-
-	it("acknowledges a malformed job instead of retrying it, since a retry can't fix it", async () => {
-		const result = await runConsumer({ v: 1, contentVersionId: "not-an-id" });
-		expect(result.explicitAcks).toEqual(["msg-1"]);
-		expect(result.retryMessages).toEqual([]);
-	});
-});
