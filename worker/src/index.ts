@@ -8,6 +8,9 @@ export type IntakeEnv = Env & {
 	SF_INSTANCE_URL: string;
 	SF_CLIENT_ID: string;
 	SF_CLIENT_SECRET: string;
+	GOOGLE_CLIENT_ID: string;
+	GOOGLE_CLIENT_SECRET: string;
+	GOOGLE_REFRESH_TOKEN: string;
 };
 
 export default {

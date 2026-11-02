@@ -1,6 +1,6 @@
 // Salesforce access for the queue consumer, as the intake pipeline user.
 // Never logs or returns tokens, and only ever fetches the one file it's asked for.
-
+import type { ItemDetails } from "./layout";
 export interface SalesforceEnv {
 	SF_INSTANCE_URL: string;
 	SF_CLIENT_ID: string;
@@ -17,7 +17,10 @@ export type SalesforceFailure =
 	| "file_not_found"
 	| "file_too_large"
 	| "download_rejected"
-	| "download_unavailable";
+	| "download_unavailable"
+	| "item_not_found"
+	| "details_rejected"
+	| "details_unavailable";
 
 // `retryable` decides between a queue retry (Salesforce is having a moment) and giving up (retrying can't help).
 export class SalesforceError extends Error {
@@ -114,4 +117,70 @@ export async function downloadVersion(
 	if (bytes.byteLength > MAX_FILE_BYTES) throw new SalesforceError("file_too_large", false);
 
 	return { bytes, contentType: response.headers.get("Content-Type") ?? "application/octet-stream" };
+}
+export interface JobDetails {
+	item: ItemDetails;
+	fileExtension: string;
+}
+
+async function getJson(fetchFn: typeof fetch, url: string, token: string, notFound: SalesforceFailure): Promise<unknown> {
+	let response: Response;
+	try {
+		response = await fetchFn(url, { headers: { Authorization: `Bearer ${token}` } });
+	} catch {
+		throw new SalesforceError("details_unavailable", true);
+	}
+	if (response.status === 404) throw new SalesforceError(notFound, false);
+	if (isTransient(response.status)) throw new SalesforceError("details_unavailable", true);
+	if (!response.ok) throw new SalesforceError("details_rejected", false);
+	try {
+		return await response.json();
+	} catch {
+		throw new SalesforceError("details_rejected", false);
+	}
+}
+
+// What naming needs: the checklist item's type, its application's term and folder name, and the file's extension.
+// Both IDs have passed parseJob (alphanumeric only), so they're safe in a query and a path.
+export async function getJobDetails(
+	env: SalesforceEnv,
+	token: string,
+	job: { contentVersionId: string; checklistItemId: string },
+	fetchFn: typeof fetch = fetch,
+): Promise<JobDetails> {
+	const base = `${baseUrl(env)}/services/data/v${apiVersion(env)}`;
+	const soql =
+		"SELECT Document_Type__c, Application__c, Application__r.Term__c, Application__r.Applicant_Folder_Name__c " +
+		`FROM Checklist_Item__c WHERE Id = '${job.checklistItemId}'`;
+
+	const result = (await getJson(fetchFn, `${base}/query?q=${encodeURIComponent(soql)}`, token, "item_not_found")) as {
+		records?: {
+			Document_Type__c?: unknown;
+			Application__c?: unknown;
+			Application__r?: { Term__c?: unknown; Applicant_Folder_Name__c?: unknown } | null;
+		}[];
+	};
+	const record = result.records?.[0];
+	if (!record || typeof record.Application__c !== "string" || record.Application__c === "") {
+		throw new SalesforceError("item_not_found", false);
+	}
+
+	const meta = (await getJson(
+		fetchFn,
+		`${base}/sobjects/ContentVersion/${job.contentVersionId}?fields=FileExtension`,
+		token,
+		"file_not_found",
+	)) as { FileExtension?: unknown };
+
+	// Blanks pass through as empty strings; the naming rules reject them as data problems.
+	const text = (value: unknown) => (typeof value === "string" ? value : "");
+	return {
+		item: {
+			applicationId: record.Application__c,
+			documentType: text(record.Document_Type__c),
+			term: text(record.Application__r?.Term__c),
+			folderName: text(record.Application__r?.Applicant_Folder_Name__c),
+		},
+		fileExtension: text(meta.FileExtension),
+	};
 }
