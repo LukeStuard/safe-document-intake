@@ -1,5 +1,6 @@
 import { verifySalesforceRequest } from "./verify";
 import { recordNonce, pruneNonces } from "./nonces";
+import { parseJob, type IntakeJob } from "./jobs";
 
 type IntakeEnv = Env & { SF_SIGNING_KEY: string };
 
@@ -45,10 +46,43 @@ export default {
 			),
 		);
 
-		// Salesforce record IDs only, never names or file contents.
+				// Salesforce record IDs only, never names or file contents.
 		console.log(JSON.stringify({ event: "hook_accepted", contentVersionId, checklistItemId }));
 
-		// Queueing comes next. Until then, accepted means verified and not a replay.
+		const job: IntakeJob = { v: 1, contentVersionId, checklistItemId, acceptedAt: now };
+		try {
+			await env.INTAKE_QUEUE.send(job);
+		} catch {
+			// The nonce is already spent, so a retry of this exact request will read as a replay.
+			// The reconciler picks up checklist items that never got a job.
+			console.error(JSON.stringify({ event: "enqueue_error", contentVersionId, checklistItemId }));
+			return new Response(null, { status: 503 });
+		}
+
+		console.log(JSON.stringify({ event: "job_queued", contentVersionId, checklistItemId }));
 		return new Response(null, { status: 202 });
+	},
+		async queue(batch, env, ctx): Promise<void> {
+		for (const message of batch.messages) {
+			const job = parseJob(message.body);
+			if (!job) {
+				// Only our own webhook writes to this queue, so a bad message means a bug, and retrying won't fix it.
+				// Log the queue's message ID, never the body.
+				console.error(JSON.stringify({ event: "job_malformed", messageId: message.id }));
+				message.ack();
+				continue;
+			}
+
+			// Skeleton: proves delivery end to end. The Salesforce download and Drive upload replace this.
+			console.log(
+				JSON.stringify({
+					event: "job_received",
+					contentVersionId: job.contentVersionId,
+					checklistItemId: job.checklistItemId,
+					attempts: message.attempts,
+				}),
+			);
+			message.ack();
+		}
 	},
 } satisfies ExportedHandler<IntakeEnv>;
