@@ -1,10 +1,16 @@
-# Probes what the intake pipeline user can do with Files, through a real client-credentials token.
-# Prints status codes, sizes and counts only: never the token, the secret or file contents.
+# Probes what the intake pipeline user can do, through a real client-credentials token.
+# Prints status codes, sizes, counts and picklist values only: never the token, the secret,
+# file contents or an applicant's name.
 # Usage:  .\scripts\Test-PipelineFileAccess.ps1 -ContentVersionId 068...
-param([Parameter(Mandatory)][string]$ContentVersionId)
+#         .\scripts\Test-PipelineFileAccess.ps1 -ChecklistItemId a02...
+param(
+    [string]$ContentVersionId,
+    [string]$ChecklistItemId
+)
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"   # The progress bar can overwrite result lines.
+if (-not $ContentVersionId -and -not $ChecklistItemId) { throw "Pass -ContentVersionId, -ChecklistItemId, or both." }
 . "$PSScriptRoot\GatewayCredential.ps1"
 
 $project  = Get-Content "$PSScriptRoot\..\sfdx-project.json" -Raw | ConvertFrom-Json
@@ -36,20 +42,42 @@ Remove-Variable token
 
 $base = "$instance/services/data/$api"
 
-# 1. Metadata for the target file (no Title, since a file name can describe a person).
-try {
-    $meta = Invoke-RestMethod -Uri "$base/sobjects/ContentVersion/$ContentVersionId`?fields=ContentSize,FileExtension" -Headers $headers
-    Write-Host "Metadata : OK ($($meta.FileExtension), $($meta.ContentSize) bytes)"
-} catch { Show-Failure "Metadata" }
+function Invoke-Query($soql) {
+    Invoke-RestMethod -Uri "$base/query?q=$([uri]::EscapeDataString($soql))" -Headers $headers
+}
 
-# 2. Download the bytes into memory only, and check they're really a PDF.
-try {
-    $resp  = Invoke-WebRequest -Uri "$base/sobjects/ContentVersion/$ContentVersionId/VersionData" -Headers $headers
-    $bytes = $resp.Content
-    $magic = [Text.Encoding]::ASCII.GetString($bytes, 0, [Math]::Min(5, $bytes.Length))
-    Write-Host "Download : OK ($($bytes.Length) bytes, starts with '$magic')"
-    Remove-Variable resp, bytes
-} catch { Show-Failure "Download" }
+if ($ContentVersionId) {
+    # Metadata for the target file (no Title, since a file name can describe a person).
+    try {
+        $meta = Invoke-RestMethod -Uri "$base/sobjects/ContentVersion/$ContentVersionId`?fields=ContentSize,FileExtension" -Headers $headers
+        Write-Host "Metadata : OK ($($meta.FileExtension), $($meta.ContentSize) bytes)"
+    } catch { Show-Failure "Metadata" }
 
+    # Download the bytes into memory only, and check they're really a PDF.
+    try {
+        $resp  = Invoke-WebRequest -Uri "$base/sobjects/ContentVersion/$ContentVersionId/VersionData" -Headers $headers
+        $bytes = $resp.Content
+        $magic = [Text.Encoding]::ASCII.GetString($bytes, 0, [Math]::Min(5, $bytes.Length))
+        Write-Host "Download : OK ($($bytes.Length) bytes, starts with '$magic')"
+        Remove-Variable resp, bytes
+    } catch { Show-Failure "Download" }
+}
+
+if ($ChecklistItemId) {
+    # The exact query the Worker uses to name folders and files.
+    try {
+        $r = (Invoke-Query "SELECT Document_Type__c, Application__c, Application__r.Term__c, Application__r.Applicant_Folder_Name__c FROM Checklist_Item__c WHERE Id = '$ChecklistItemId'").records[0]
+        $folder = $r.Application__r.Applicant_Folder_Name__c
+        $shape = if ($folder -match '^[^,]+, [^,]+$') { "Last, First shape" } else { "UNEXPECTED shape" }
+        Write-Host "Fields   : OK (type '$($r.Document_Type__c)', term '$($r.Application__r.Term__c)', folder name $($folder.Length) chars, $shape)"
+        Remove-Variable r, folder
+    } catch { Show-Failure "Fields" }
+
+    # Negative check: the formula must not open a path to the Contact itself.
+    try {
+        Invoke-Query "SELECT Application__r.Applicant__r.LastName FROM Checklist_Item__c WHERE Id = '$ChecklistItemId'" | Out-Null
+        Write-Host "Contact  : REACHABLE (this should not happen)"
+    } catch { Show-Failure "Contact  (expected)" }
+}
 
 Remove-Variable headers
