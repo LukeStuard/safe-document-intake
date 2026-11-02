@@ -1,8 +1,14 @@
 import { verifySalesforceRequest } from "./verify";
 import { recordNonce, pruneNonces } from "./nonces";
-import { parseJob, type IntakeJob } from "./jobs";
+import type { IntakeJob } from "./jobs";
+import { handleMessage } from "./consumer";
 
-type IntakeEnv = Env & { SF_SIGNING_KEY: string };
+export type IntakeEnv = Env & {
+	SF_SIGNING_KEY: string;
+	SF_INSTANCE_URL: string;
+	SF_CLIENT_ID: string;
+	SF_CLIENT_SECRET: string;
+};
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
@@ -62,27 +68,11 @@ export default {
 		console.log(JSON.stringify({ event: "job_queued", contentVersionId, checklistItemId }));
 		return new Response(null, { status: 202 });
 	},
-		async queue(batch, env, ctx): Promise<void> {
+			async queue(batch, env, ctx): Promise<void> {
 		for (const message of batch.messages) {
-			const job = parseJob(message.body);
-			if (!job) {
-				// Only our own webhook writes to this queue, so a bad message means a bug, and retrying won't fix it.
-				// Log the queue's message ID, never the body.
-				console.error(JSON.stringify({ event: "job_malformed", messageId: message.id }));
-				message.ack();
-				continue;
+			// Wrapped so fetch is called normally; a detached Workers fetch can throw "Illegal invocation".
+			await handleMessage(message, env, { fetch: (input, init) => fetch(input, init) });
+		}
 			}
 
-			// Skeleton: proves delivery end to end. The Salesforce download and Drive upload replace this.
-			console.log(
-				JSON.stringify({
-					event: "job_received",
-					contentVersionId: job.contentVersionId,
-					checklistItemId: job.checklistItemId,
-					attempts: message.attempts,
-				}),
-			);
-			message.ack();
-		}
-	},
 } satisfies ExportedHandler<IntakeEnv>;

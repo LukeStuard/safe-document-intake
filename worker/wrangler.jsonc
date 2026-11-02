@@ -36,7 +36,12 @@
                                 "dead_letter_queue": "intake-documents-dlq"
                         }
                 ]
+				
+        },
+		        "vars": {
+                "SF_API_VERSION": "68.0"
         }
+		
 
 	
 	/**
