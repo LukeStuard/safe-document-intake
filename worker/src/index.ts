@@ -2,6 +2,7 @@ import { verifySalesforceRequest } from "./verify";
 import { recordNonce, pruneNonces } from "./nonces";
 import type { IntakeJob } from "./jobs";
 import { handleMessage } from "./consumer";
+import { audit } from "./audit";
 
 export type IntakeEnv = Env & {
 	SF_SIGNING_KEY: string;
@@ -67,6 +68,9 @@ export default {
 			console.error(JSON.stringify({ event: "enqueue_error", contentVersionId, checklistItemId }));
 			return new Response(null, { status: 503 });
 		}
+
+				// Off the response path: Salesforce gets its 202 without waiting, and audit never throws.
+		ctx.waitUntil(audit(env.AUDIT_DB, { contentVersionId, checklistItemId, event: "queued" }));
 
 		console.log(JSON.stringify({ event: "job_queued", contentVersionId, checklistItemId }));
 		return new Response(null, { status: 202 });

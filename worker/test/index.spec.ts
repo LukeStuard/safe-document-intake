@@ -14,6 +14,11 @@ async function nonceRows(): Promise<number> {
 	return row?.n ?? 0;
 }
 
+async function queuedRows(): Promise<number> {
+	const row = await testEnv.AUDIT_DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE event = 'queued'").first<{ n: number }>();
+	return row?.n ?? 0;
+}
+
 describe("intake Worker routing", () => {
 	it("returns 404 for anything but the hook path", async () => {
 		const response = await exports.default.fetch("https://intake.test/");
@@ -108,6 +113,7 @@ async function runWorker(body: string, signature: string, overrides: Record<stri
 
 describe("queueing", () => {
 	it("queues exactly one job carrying record IDs only", async () => {
+		const before = await queuedRows();
 		const { queue, sent } = captureQueue();
 		const body = payload(now());
 
@@ -120,6 +126,7 @@ describe("queueing", () => {
 		expect(Object.keys(job).sort()).toEqual(["acceptedAt", "checklistItemId", "contentVersionId", "v"]);
 		expect(job.v).toBe(1);
 		expect(Math.abs((job.acceptedAt as number) - now())).toBeLessThan(5);
+		expect(await queuedRows()).toBe(before + 1);
 	});
 
 	it("does not queue a second job for a replayed request", async () => {
@@ -133,6 +140,7 @@ describe("queueing", () => {
 	});
 
 	it("returns 503 when the queue is unavailable, with the nonce already spent", async () => {
+		const queuedBefore = await queuedRows();
 		const { queue } = captureQueue(true);
 		const body = payload(now());
 		const signature = await sign(body, KEY);
@@ -144,6 +152,8 @@ describe("queueing", () => {
 		// Documents the chosen trade-off: a failed enqueue still uses up the nonce,
 		// and the reconciler, not a retry of this request, recovers the job.
 		expect(await nonceRows()).toBe(before + 1);
+				// No job, no "queued" record.
+		expect(await queuedRows()).toBe(queuedBefore);
 	});
 	
 });

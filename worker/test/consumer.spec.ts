@@ -5,6 +5,7 @@ import { handleMessage, MAX_ATTEMPTS, type ConsumerEnv } from "../src/consumer";
 import { DRIVE_FILE_SCOPE } from "../src/drive";
 import { findUpload, folderKey, getFolderId } from "../src/store";
 
+
 const db = (env as unknown as { AUDIT_DB: D1Database }).AUDIT_DB;
 
 const ENV: ConsumerEnv = {
@@ -89,6 +90,14 @@ const retried = [expect.objectContaining({ msgId: "msg-1" })];
 const loggedErrors = () => vi.spyOn(console, "error").mockImplementation(() => {});
 const lastLog = (spy: ReturnType<typeof loggedErrors>) => JSON.parse(String(spy.mock.calls.at(-1)?.[0]));
 
+const auditRows = async (cv: string) =>
+	(
+		await db
+			.prepare("SELECT event, reason, attempt, final, sequence FROM audit_log WHERE content_version_id = ? ORDER BY id")
+			.bind(cv)
+			.all()
+	).results;
+
 afterEach(() => vi.restoreAllMocks());
 
 describe("queue consumer: delivery", () => {
@@ -104,6 +113,7 @@ describe("queue consumer: delivery", () => {
 		expect(start.parents).toEqual([await getFolderId(db, folderKey.application(t.app))]);
 		expect(start.appProperties).toEqual({ contentVersionId: t.cv, checklistItemId: t.item });
 		expect((await findUpload(db, t.cv))?.sequence).toBe(1);
+		expect(await auditRows(t.cv)).toEqual([{ event: "uploaded", reason: null, attempt: 1, final: null, sequence: 1 }]);
 	});
 
 	it("numbers a second file of the same type #2, reusing every folder", async () => {
@@ -145,6 +155,9 @@ describe("queue consumer: failures", () => {
 
 		expect(result.retryMessages).toEqual(retried);
 		expect(await findUpload(db, t.cv)).toBeNull();
+		expect(await auditRows(t.cv)).toEqual([
+		{ event: "failed", reason: "download_unavailable", attempt: 1, final: 0, sequence: null },
+		]);
 	});
 
 	it("gives up on a file the pipeline can't see, before touching Google", async () => {
@@ -154,6 +167,7 @@ describe("queue consumer: failures", () => {
 
 		expect(result.explicitAcks).toEqual(["msg-1"]);
 		expect(w.of("gToken")).toHaveLength(0);
+		expect(await auditRows(t.cv)).toEqual([{ event: "failed", reason: "file_not_found", attempt: 1, final: 1, sequence: null }]);
 	});
 
 	it("gives up when the checklist item can't be found, before downloading", async () => {
@@ -218,4 +232,6 @@ describe("queue consumer: failures", () => {
 		await run(jobFor(t), fetchFn, MAX_ATTEMPTS);
 		expect(lastLog(errors).final).toBe(true);
 	});
+
+	
 });

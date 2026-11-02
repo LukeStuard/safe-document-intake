@@ -1,9 +1,10 @@
-import { parseJob } from "./jobs";
-import { getAccessToken, getJobDetails, downloadVersion, SalesforceError, type SalesforceEnv } from "./salesforce";
-import { getDriveToken, uploadFile, DriveError, type DriveEnv } from "./drive";
-import { folderPath, fileName, LayoutError } from "./layout";
-import { findUpload, nextSequence, recordUpload } from "./store";
-import { ensureStudentFolder } from "./deliver";
+import { parseJob } from './jobs';
+import { getAccessToken, getJobDetails, downloadVersion, SalesforceError, type SalesforceEnv } from './salesforce';
+import { getDriveToken, uploadFile, DriveError, type DriveEnv } from './drive';
+import { folderPath, fileName, LayoutError } from './layout';
+import { findUpload, nextSequence, recordUpload } from './store';
+import { ensureStudentFolder } from './deliver';
+import { audit } from './audit';
 
 // Must match max_retries (5) in wrangler.jsonc: the first try plus five retries.
 export const MAX_ATTEMPTS = 6;
@@ -26,7 +27,7 @@ export async function handleMessage(message: Message<unknown>, env: ConsumerEnv,
 	if (!job) {
 		// Only our own webhook writes to this queue, so a bad message means a bug, and retrying won't fix it.
 		// Log the queue's message ID, never the body.
-		console.error(JSON.stringify({ event: "job_malformed", messageId: message.id }));
+		console.error(JSON.stringify({ event: 'job_malformed', messageId: message.id }));
 		message.ack();
 		return;
 	}
@@ -38,7 +39,8 @@ export async function handleMessage(message: Message<unknown>, env: ConsumerEnv,
 		// A redelivered job whose file already reached Drive is finished.
 		const existing = await findUpload(env.AUDIT_DB, job.contentVersionId);
 		if (existing) {
-			console.log(JSON.stringify({ event: "job_already_uploaded", ...ids, sequence: existing.sequence }));
+			console.log(JSON.stringify({ event: 'job_already_uploaded', ...ids, sequence: existing.sequence }));
+			await audit(env.AUDIT_DB, { ...ids, event: 'already_uploaded', attempt: message.attempts, sequence: existing.sequence });
 			message.ack();
 			return;
 		}
@@ -58,7 +60,7 @@ export async function handleMessage(message: Message<unknown>, env: ConsumerEnv,
 				name: fileName(item.folderName, item.documentType, sequence, fileExtension),
 				parentId: folderId,
 				bytes: file.bytes,
-				contentType: fileExtension.toLowerCase() === "pdf" ? "application/pdf" : file.contentType,
+				contentType: fileExtension.toLowerCase() === 'pdf' ? 'application/pdf' : file.contentType,
 				appProperties: { contentVersionId: job.contentVersionId, checklistItemId: job.checklistItemId },
 			},
 			deps.fetch,
@@ -76,19 +78,18 @@ export async function handleMessage(message: Message<unknown>, env: ConsumerEnv,
 			now(),
 		);
 
-		console.log(
-			JSON.stringify({ event: "job_uploaded", ...ids, sequence, bytes: file.bytes.byteLength, attempts: message.attempts }),
-		);
+		console.log(JSON.stringify({ event: 'job_uploaded', ...ids, sequence, bytes: file.bytes.byteLength, attempts: message.attempts }));
+		await audit(env.AUDIT_DB, { ...ids, event: 'uploaded', attempt: message.attempts, sequence });
 		message.ack();
 	} catch (e) {
 		// Anything unclassified is a bug or a surprise: retry it, and log only the error's type.
 		const known = classify(e);
-		const reason = known?.reason ?? "unexpected_error";
+		const reason = known?.reason ?? 'unexpected_error';
 		const retryable = known?.retryable ?? true;
 		const final = !retryable || message.attempts >= MAX_ATTEMPTS;
 		console.error(
 			JSON.stringify({
-				event: "job_failed",
+				event: 'job_failed',
 				...ids,
 				reason,
 				...(known ? {} : { errorName: e instanceof Error ? e.name : typeof e }),
@@ -97,6 +98,8 @@ export async function handleMessage(message: Message<unknown>, env: ConsumerEnv,
 				final,
 			}),
 		);
+		// Written before the retry or give-up, so the record exists even after the message leaves the 24-hour DLQ.
+		await audit(env.AUDIT_DB, { ...ids, event: 'failed', reason, attempt: message.attempts, final });
 		if (retryable) message.retry();
 		else message.ack();
 	}
