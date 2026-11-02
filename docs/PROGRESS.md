@@ -166,3 +166,15 @@
 - Incident: `SF_API_VERSION` was set to `68` instead of `68.0`. Salesforce answers 404 for an unknown version, so the live job was logged as `file_not_found` and given up on. It failed safe (one attempt, no retries), and the probe script proved the file was fine. Fix: the version is validated before any request, so a bad setting now surfaces as a bug, not a missing file. Pinned by a test.
 - Verified live: an upload produced `job_downloaded` with 1,446,659 bytes on attempt 1, matching the file's `ContentSize` from the probe.
 - 71 tests passing.
+
+## 2026-11-02: Folder layout, Salesforce side
+
+- Drive layout emulates the original SharePoint sync: `Safe Document Intake/Student-Admissions/<year>/<term>/<Last, First>/<Last First> <Doc Type> #n.pdf`. Neutral root name so nothing points at a real employer. Middle names dropped (the Contact field depends on an org setting, and the synthetic data doesn't use them).
+- Improvement on the original, which found folders by name: D1 will map application ID to Drive folder ID, so duplicate names, name corrections and term changes can't misfile a document.
+- New formula `Application__c.Applicant_Folder_Name__c` builds "Last, First" in Salesforce, where the parts are still separate, so the Worker never splits a full name.
+- Deliberate grants to Intake_Integration, read-only: `Applicant_Folder_Name__c` and `Term__c`. The year comes from the term's last four digits, so no field for it.
+- Finding: `Checklist_Item__c.Document_Type__c` is required, and a required field's access can't be set in a permission set; the deploy was refused. Required fields are readable by anyone who can read the object, so field-level security can't hide them. The pipeline already had it.
+- Deploy reran `DocumentReviewRulesTest`: 11/11. Grants verified in `FieldPermissions`, not just the file.
+- Live checks as the pipeline user (probe script now takes `-ChecklistItemId`, and prints a name's length and shape, never the name):
+  - The Worker's exact query: type, term and a "Last, First" folder name: PASS
+  - `Application__r.Applicant__r.LastName`: `400 INVALID_FIELD`. The formula doesn't open a path to the Contact: PASS

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Applicant_Folder_Name__c</fullName>
+    <label>Applicant Folder Name</label>
+    <description
+  >"Last, First" for the applicant's Drive folder, computed from the related Contact. Built here, where first and last name are still separate, so the pipeline never has to split a full name.</description>
+    <type>Text</type>
+    <formula
+  >TRIM(Applicant__r.LastName &amp; ", " &amp; Applicant__r.FirstName)</formula>
+    <formulaTreatBlanksAs>BlankAsBlank</formulaTreatBlanksAs>
+    <unique>false</unique>
+    <trackTrending>false</trackTrending>
+</CustomField>
