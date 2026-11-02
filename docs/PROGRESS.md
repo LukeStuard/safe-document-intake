@@ -198,3 +198,14 @@
 - Known gap: a folder deleted by hand in Drive stays in D1, so uploads to it would fail. For the reconciler or a hardening pass.
 - Verified live: an upload produced `job_uploaded` (sequence 1, 775,362 bytes, attempt 1) three seconds after the webhook. Drive shows `Safe Document Intake/Student-Admissions/2026/Fall 2026/Delgado, Noa/Delgado Noa Resume #1.pdf`, 757 KB, opening correctly. D1 holds the five folder keys and one upload row.
 - 122 tests passing. Phase 2 remaining: audit trail in D1, scheduled reconciler.
+
+## 2026-11-02: Append-only audit trail
+
+- Migration `0003_audit_log.sql`, matching the gateway's `audit_log` (autoincrement ID, ISO timestamp, `CHECK` on the event, metadata only), with one step further: `BEFORE UPDATE` and `BEFORE DELETE` triggers make it append-only by enforcement, not just by comment.
+- Events: `queued` (webhook), `uploaded`, `already_uploaded`, and `failed` on every attempt, with reason, attempt number and `final`. The failure row is written before the retry or give-up, so the record outlives the message's 24-hour DLQ retention.
+- Writes are best-effort: a failed audit write is logged and never blocks an upload or turns a success into a retry. The webhook writes its row with `waitUntil`, off the response path.
+- Malformed messages get no audit row: they have no trustworthy IDs to record.
+- D1 accepted the triggers (verified in `sqlite_master`).
+- Verified live: a second Resume upload produced `job_uploaded` with sequence 2 (`Delgado Noa Resume #2.pdf`), and the audit log shows `queued` then `uploaded`.
+- Tamper test in production: `UPDATE audit_log ...` through Wrangler, with a valid token, was refused with `audit_log is append-only: SQLITE_CONSTRAINT_TRIGGER`: PASS
+- 126 tests passing (audit assertions added to existing consumer and webhook tests).
