@@ -148,3 +148,11 @@
 - The consumer validates every message (`parseJob`) and rebuilds it, dropping unknown fields. Malformed messages are logged by queue message ID and acknowledged, since only our own webhook writes to the queue and a retry can't fix a bug.
 - Skeleton consumer logs and acknowledges jobs. Verified live: an upload in the dev org produced `hook_accepted`, `job_queued`, then `job_received` on attempt 1, two seconds later.
 - Test plugin's `createMessageBatch` and `getQueueResult` signatures checked in the installed types before writing consumer tests. 48 passing.
+
+## 2026-11-02: Pipeline file access verified
+
+- Phase 1 never tested file downloads, so it was checked before any consumer code. `scripts/Test-PipelineFileAccess.ps1` probes as the pipeline user through a real client-credentials token and prints only status codes, sizes and the first bytes, never the token, secret or contents.
+- File on a checklist item: metadata OK, download OK (552,129 bytes, matching `ContentSize`, starts with `%PDF-`): PASS
+- File linked to nothing (made for the test, then deleted): metadata and download both `404 NOT_FOUND`: PASS. To the pipeline, files outside applications don't exist.
+- Finding: an unfiltered `ContentVersion` count returned 0 for the pipeline even though it can open application files by ID. Counts only show files a user owns, so it is no proof of scope; removed from the script. The by-ID negative test is the real check.
+- Finding: every file in the org was already on a checklist item, so the negative case needed a purpose-made file.
