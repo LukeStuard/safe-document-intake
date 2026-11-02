@@ -1,5 +1,5 @@
 import { env, exports } from "cloudflare:workers";
-import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { createExecutionContext, waitOnExecutionContext, createMessageBatch, getQueueResult } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
 import worker from "../src/index";
 import { sign, payload, hookRequest, HOOK_URL } from "./helpers";
@@ -77,5 +77,100 @@ describe("replay protection", () => {
 		await waitOnExecutionContext(ctx);
 
 		expect(response.status).toBe(503);
+	});
+});
+// A stand-in for the queue binding that records what the Worker sends.
+function captureQueue(fail = false) {
+	const sent: unknown[] = [];
+	const queue = {
+		async send(body: unknown) {
+			if (fail) throw new Error("Queue unavailable");
+			sent.push(body);
+		},
+		async sendBatch() {
+			throw new Error("sendBatch is not used by the webhook");
+		},
+	} as unknown as Queue;
+	return { queue, sent };
+}
+
+async function runWorker(body: string, signature: string, overrides: Record<string, unknown>) {
+	const ctx = createExecutionContext();
+	const response = await worker.fetch(
+		hookRequest(body, signature) as Request<unknown, IncomingRequestCfProperties>,
+		{ ...testEnv, ...overrides } as unknown as Env & { SF_SIGNING_KEY: string },
+		ctx,
+	);
+	await waitOnExecutionContext(ctx);
+	return response;
+}
+
+describe("queueing", () => {
+	it("queues exactly one job carrying record IDs only", async () => {
+		const { queue, sent } = captureQueue();
+		const body = payload(now());
+
+		const response = await runWorker(body, await sign(body, KEY), { INTAKE_QUEUE: queue });
+
+		expect(response.status).toBe(202);
+		expect(sent).toHaveLength(1);
+		const job = sent[0] as Record<string, unknown>;
+		// Pin the exact field list, so nothing about the applicant can slip into a message unnoticed.
+		expect(Object.keys(job).sort()).toEqual(["acceptedAt", "checklistItemId", "contentVersionId", "v"]);
+		expect(job.v).toBe(1);
+		expect(Math.abs((job.acceptedAt as number) - now())).toBeLessThan(5);
+	});
+
+	it("does not queue a second job for a replayed request", async () => {
+		const { queue, sent } = captureQueue();
+		const body = payload(now());
+		const signature = await sign(body, KEY);
+
+		expect((await runWorker(body, signature, { INTAKE_QUEUE: queue })).status).toBe(202);
+		expect((await runWorker(body, signature, { INTAKE_QUEUE: queue })).status).toBe(401);
+		expect(sent).toHaveLength(1);
+	});
+
+	it("returns 503 when the queue is unavailable, with the nonce already spent", async () => {
+		const { queue } = captureQueue(true);
+		const body = payload(now());
+		const signature = await sign(body, KEY);
+		const before = await nonceRows();
+
+		const response = await runWorker(body, signature, { INTAKE_QUEUE: queue });
+
+		expect(response.status).toBe(503);
+		// Documents the chosen trade-off: a failed enqueue still uses up the nonce,
+		// and the reconciler, not a retry of this request, recovers the job.
+		expect(await nonceRows()).toBe(before + 1);
+	});
+	
+});
+
+const GOOD_JOB = {
+	v: 1,
+	contentVersionId: "068000000000001AAA",
+	checklistItemId: "a01000000000001AAA",
+	acceptedAt: 1767225600,
+};
+
+async function runConsumer(body: unknown) {
+	const batch = createMessageBatch("intake-documents", [{ id: "msg-1", timestamp: new Date(), attempts: 1, body }]);
+	const ctx = createExecutionContext();
+	await worker.queue!(batch, testEnv as unknown as Env & { SF_SIGNING_KEY: string }, ctx);
+	return getQueueResult(batch, ctx);
+}
+
+describe("queue consumer", () => {
+	it("acknowledges a well-formed job", async () => {
+		const result = await runConsumer(GOOD_JOB);
+		expect(result.explicitAcks).toEqual(["msg-1"]);
+		expect(result.retryMessages).toEqual([]);
+	});
+
+	it("acknowledges a malformed job instead of retrying it, since a retry can't fix it", async () => {
+		const result = await runConsumer({ v: 1, contentVersionId: "not-an-id" });
+		expect(result.explicitAcks).toEqual(["msg-1"]);
+		expect(result.retryMessages).toEqual([]);
 	});
 });

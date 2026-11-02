@@ -18,7 +18,26 @@
 			"database_name": "intake-audit",
 			"database_id": "a31aa7bc-f2da-4240-bd78-bd8e69391ef6"
 		}
-	]
+	],
+	 "queues": {
+                "producers": [
+                        {
+                                "queue": "intake-documents",
+                                "binding": "INTAKE_QUEUE"
+                        }
+                ],
+                "consumers": [
+                        {
+                                "queue": "intake-documents",
+                                "max_batch_size": 1,
+                                "max_concurrency": 1,
+                                "max_retries": 5,
+                                "retry_delay": 60,
+                                "dead_letter_queue": "intake-documents-dlq"
+                        }
+                ]
+        }
+
 	
 	/**
 	 * Smart Placement

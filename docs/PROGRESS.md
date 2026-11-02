@@ -136,3 +136,15 @@
 - Near miss: a terminal without the intake token loaded fell back to a stale Wrangler OAuth login for CIAM's Cloudflare account. The deploy failed only because the D1 binding pointed at a database in the personal account. Confirmed nothing was created there. Fix: `account_id` pinned in `wrangler.jsonc`, so deploys from any other login are refused.
 - Checklist Item layout: Files and Document Reviews related lists added. Notes & Attachments deliberately left off, since legacy attachments would bypass the Files triggers.
 - Live result: a new file version uploaded in the UI produced `hook_accepted` at the Worker, with its nonce recorded in D1.
+
+## 2026-11-02: Queue and consumer skeleton
+
+- Added Queues: Edit to the intake Cloudflare token (one permission, logged here).
+- Queues are on the Workers free plan, but retention is capped at 24 hours, and that applies to the dead-letter queue too. So the DLQ can't be the record of a failure: the consumer must write failures to the D1 audit log before giving up, and the reconciler re-finds unfinished work.
+- Created `intake-documents` and `intake-documents-dlq`. Declined Wrangler's offer to append a binding, so the whole queue config was written and reviewed in one edit.
+- Consumer settings: batch size 1 (one bad PDF can't fail its neighbors, and each run stays well under the free plan's 50 subrequests), concurrency 1 (pacing for Gemini later), 5 retries 60 seconds apart, then the DLQ. `retry_delay` confirmed in the installed Wrangler's schema before use.
+- The webhook enqueues a versioned job carrying record IDs only. A test pins the exact field list.
+- Ordering decision: the nonce is recorded before enqueueing. If the enqueue fails, the Worker returns 503 and the nonce stays spent, so the reconciler recovers the job rather than a retry. The reverse order would let a replayed request create duplicate jobs. A test documents this trade-off.
+- The consumer validates every message (`parseJob`) and rebuilds it, dropping unknown fields. Malformed messages are logged by queue message ID and acknowledged, since only our own webhook writes to the queue and a retry can't fix a bug.
+- Skeleton consumer logs and acknowledges jobs. Verified live: an upload in the dev org produced `hook_accepted`, `job_queued`, then `job_received` on attempt 1, two seconds later.
+- Test plugin's `createMessageBatch` and `getQueueResult` signatures checked in the installed types before writing consumer tests. 48 passing.
