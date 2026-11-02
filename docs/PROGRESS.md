@@ -178,3 +178,12 @@
 - Live checks as the pipeline user (probe script now takes `-ChecklistItemId`, and prints a name's length and shape, never the name):
   - The Worker's exact query: type, term and a "Last, First" folder name: PASS
   - `Application__r.Applicant__r.LastName`: `400 INVALID_FIELD`. The formula doesn't open a path to the Contact: PASS
+
+## 2026-11-02: Drive client, naming rules and D1 records (not yet wired in)
+
+- Google secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_REFRESH_TOKEN` piped from Credential Manager. The refresh token is the real key: a desktop-app client secret isn't treated as confidential by Google.
+- `src/drive.ts`: refresh token to access token, folder creation, resumable upload. Google's docs limit multipart uploads to 5 MB, under our 10 MB cap, and recommend resumable uploads for most apps, so every upload is resumable (two requests).
+- Guards: the token's scope is checked on every exchange and anything beyond `drive.file` is refused; the upload session URL from Google's `Location` header must be `https://www.googleapis.com/upload/drive/v3/files...` before any bytes are sent (tested with another host, plain http, a non-upload path and no header, each sending no bytes); Google's 403 rate limits retry while real 403s don't. Files carry their Salesforce record IDs in private `appProperties`.
+- `src/layout.ts`: naming rules, pure functions. Strips characters Windows forbids, so downloaded files work anywhere, and a name can't contain a path separator. A bad term, name or type is a data problem and gives up rather than retrying.
+- Migration `0002_drive_records.sql`: `drive_folders` (keyed by what a folder is, never its name) and `drive_uploads` (keyed by ContentVersion, for idempotency, with a unique index so `#n` can't repeat). Applied remotely and verified.
+- 117 tests passing.
