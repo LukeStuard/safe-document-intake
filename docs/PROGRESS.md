@@ -187,3 +187,14 @@
 - `src/layout.ts`: naming rules, pure functions. Strips characters Windows forbids, so downloaded files work anywhere, and a name can't contain a path separator. A bad term, name or type is a data problem and gives up rather than retrying.
 - Migration `0002_drive_records.sql`: `drive_folders` (keyed by what a folder is, never its name) and `drive_uploads` (keyed by ContentVersion, for idempotency, with a unique index so `#n` can't repeat). Applied remotely and verified.
 - 117 tests passing.
+
+## 2026-11-02: End to end, Salesforce to Drive
+
+- Consumer now: idempotency check, Salesforce token, checklist item details and file extension, naming check, download, Google token, folder chain, `#n`, resumable upload, D1 record. Naming data is checked before the download, so bad data fails without fetching a file.
+- `src/deliver.ts`: each folder level is found by its D1 key and only created in Drive if it has never existed. The student folder is keyed by application ID.
+- A redelivered job whose ContentVersion is already in `drive_uploads` is acknowledged without calling Salesforce or Google. Tested.
+- Naming problems (`LayoutError`) give up rather than retry; unexpected errors retry and log only their type.
+- Known gap, logged rather than hidden: if the upload succeeds and the D1 record fails, the retry uploads a second copy. Rare, visible and harmless; the private `appProperties` tag is what a later fix can use to find the file before re-uploading.
+- Known gap: a folder deleted by hand in Drive stays in D1, so uploads to it would fail. For the reconciler or a hardening pass.
+- Verified live: an upload produced `job_uploaded` (sequence 1, 775,362 bytes, attempt 1) three seconds after the webhook. Drive shows `Safe Document Intake/Student-Admissions/2026/Fall 2026/Delgado, Noa/Delgado Noa Resume #1.pdf`, 757 KB, opening correctly. D1 holds the five folder keys and one upload row.
+- 122 tests passing. Phase 2 remaining: audit trail in D1, scheduled reconciler.
