@@ -64,4 +64,26 @@ describe("audit log", () => {
 			contentVersionId: "068000000000204AAA",
 		});
 	});
+    	it("records intake events as stage 'intake' without being told", async () => {
+		await audit(db, { contentVersionId: "068000000000205AAA", checklistItemId: "a01000000000205AAA", event: "queued" });
+		const row = await db.prepare("SELECT stage, model FROM audit_log WHERE content_version_id = ?").bind("068000000000205AAA").first();
+		expect(row).toEqual({ stage: "intake", model: null });
+	});
+
+	it("records screening events with their stage and model", async () => {
+		const ok = await audit(db, {
+			contentVersionId: "068000000000206AAA",
+			checklistItemId: "a01000000000206AAA",
+			stage: "screen",
+			event: "screened",
+			attempt: 1,
+			model: "gemini-3.5-flash-lite",
+		});
+		expect(ok).toBe(true);
+		const row = await db
+			.prepare("SELECT stage, event, model FROM audit_log WHERE content_version_id = ?")
+			.bind("068000000000206AAA")
+			.first();
+		expect(row).toEqual({ stage: "screen", event: "screened", model: "gemini-3.5-flash-lite" });
+	});
 });
