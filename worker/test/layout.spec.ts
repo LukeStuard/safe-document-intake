@@ -69,7 +69,23 @@ describe("fileName", () => {
 	it("falls back to pdf for an unusable extension", () => {
 		expect(fileName("Shah, Rajvi", "Resume", 1, "../")).toBe("Shah Rajvi Resume #1.pdf");
 	});
+	it("marks a flagged file at the start of its name, numbering unchanged", () => {
+		expect(fileName("Shah, Rajvi", "Transcript", 2, "pdf", true)).toBe("[FLAGGED] Shah Rajvi Transcript #2.pdf");
+	});
+
+	it("leaves an unflagged name exactly as before", () => {
+		expect(fileName("Shah, Rajvi", "Transcript", 2, "pdf", false)).toBe("Shah Rajvi Transcript #2.pdf");
+	});
+
+	it("strips brackets from the name, so only the pipeline can produce the marker", () => {
+		expect(fileName("[FLAGGED] Shah, Rajvi", "Transcript", 1, "pdf")).toBe("FLAGGED Shah Rajvi Transcript #1.pdf");
+	});
+
+	it("rejects a name that is nothing but brackets", () => {
+		expect(() => fileName("[], []", "Transcript", 1, "pdf")).toThrow(LayoutError);
+	});
 });
+	
 
 describe("folderPath", () => {
 	it("builds year, term, student", () => {
