@@ -7,6 +7,10 @@ import { audit } from "../src/audit";
 
 const db = (env as unknown as { AUDIT_DB: D1Database }).AUDIT_DB;
 
+// A finished file: its screening row is in the audit log.
+const markScreened = (ref: { cv: string; item: string }) =>
+	audit(db, { contentVersionId: ref.cv, checklistItemId: ref.item, stage: "screen", event: "screened", reason: "pass", attempt: 1 });
+
 let counter = 500;
 function newRef() {
 	counter++;
@@ -77,6 +81,7 @@ describe("reconciler", () => {
 			{ contentVersionId: done.cv, applicationId: "a00000000000500AAA", documentType: "Resume", sequence: 1, driveFileId: "f" },
 			1,
 		);
+		await markScreened(done);
 		const q = captureQueue();
 		const sf = salesforce([
 			{
@@ -145,6 +150,7 @@ describe("reconciler", () => {
 			{ contentVersionId: done.cv, applicationId: "a00000000000501AAA", documentType: "Resume", sequence: 1, driveFileId: "f" },
 			1,
 		);
+		await markScreened(done);
 		const q = captureQueue();
 
 		const result = await run(q, salesforce([{ items: [{ item: done.item, cvs: [done.cv] }] }]));
@@ -162,5 +168,43 @@ describe("reconciler", () => {
 		expect(q.calls()).toBe(1);
 		expect(q.sent).toHaveLength(MAX_PER_RUN);
 		expect(result.deferred).toBe(50);
+	});
+		it("queues files in Drive that were never screened, so the consumer can finish them", async () => {
+		const old = newRef();
+		await recordUpload(
+			db,
+			{ contentVersionId: old.cv, applicationId: "a00000000000502AAA", documentType: "Resume", sequence: 1, driveFileId: "f" },
+			1,
+		);
+		const q = captureQueue();
+
+		const result = await run(q, salesforce([{ items: [{ item: old.item, cvs: [old.cv] }] }]));
+
+		expect(q.sent.map((b) => b.contentVersionId)).toEqual([old.cv]);
+		expect(result).toMatchObject({ found: 1, alreadyUploaded: 0, unscreened: 1, queued: 1 });
+	});
+
+	it("leaves held files alone, in Drive or not", async () => {
+		const heldInDrive = newRef();
+		const heldElsewhere = newRef();
+		await recordUpload(
+			db,
+			{ contentVersionId: heldInDrive.cv, applicationId: "a00000000000503AAA", documentType: "Resume", sequence: 1, driveFileId: "f" },
+			1,
+		);
+		await db.batch(
+			[heldInDrive, heldElsewhere].map((r) =>
+				db.prepare("INSERT INTO screen_holds (content_version_id, reason, held_at) VALUES (?, ?, ?)").bind(r.cv, "eval_test_set", 1),
+			),
+		);
+		const q = captureQueue();
+
+		const result = await run(
+			q,
+			salesforce([{ items: [{ item: heldInDrive.item, cvs: [heldInDrive.cv] }, { item: heldElsewhere.item, cvs: [heldElsewhere.cv] }] }]),
+		);
+
+		expect(q.sent).toHaveLength(0);
+		expect(result.held).toBe(2);
 	});
 });

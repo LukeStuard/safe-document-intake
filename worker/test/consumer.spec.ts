@@ -5,7 +5,7 @@ import { handleMessage, MAX_ATTEMPTS, UNSCREENED, type ConsumerEnv } from "../sr
 import { DRIVE_FILE_SCOPE } from "../src/drive";
 import { DAILY_LIMIT, quotaDay } from "../src/pacing";
 import { SCREEN_MODEL } from "../src/screener";
-import { findUpload, folderKey, getFolderId } from "../src/store";
+import { findUpload, folderKey, getFolderId, recordUpload } from "../src/store";
 
 const db = (env as unknown as { AUDIT_DB: D1Database }).AUDIT_DB;
 
@@ -63,7 +63,8 @@ type Route =
 	| "gemini"
 	| "folder"
 	| "uploadStart"
-	| "uploadPut";
+	| "uploadPut"
+	| "rename";
 let folderCounter = 0;
 
 interface WorldOptions {
@@ -84,6 +85,7 @@ function world(opts: WorldOptions) {
 		const url = String(input);
 		const route: Route =
 			url === SESSION ? "uploadPut"
+			: init?.method === "PATCH" && url.startsWith("https://www.googleapis.com/drive/v3/files/") ? "rename"
 			: url.startsWith("https://generativelanguage.googleapis.com/") ? "gemini"
 			: url.startsWith("https://oauth2.googleapis.com/token") ? "gToken"
 			: url.endsWith("/services/oauth2/token") ? "sfToken"
@@ -128,6 +130,8 @@ function world(opts: WorldOptions) {
 				return new Response(null, { status: 200, headers: { Location: SESSION } });
 			case "uploadPut":
 				return Response.json({ id: "file-1" });
+			case "rename":
+				return Response.json({ id: "drive-file-old" });	
 		}
 	}) as typeof fetch;
 	return { fetchFn, of: (r: Route) => calls.filter((c) => c.route === r), all: calls };
@@ -463,5 +467,98 @@ describe("queue consumer: failures", () => {
 		expect(lastLog(errors).final).toBe(false);
 		await run(jobFor(t), fetchFn, MAX_ATTEMPTS);
 		expect(lastLog(errors).final).toBe(true);
+	});
+});
+
+
+// A file in Drive from before screening existed: an upload record, but no screening row in the audit log.
+async function filedBeforeScreening(t: ReturnType<typeof newIds>) {
+	await recordUpload(
+		db,
+		{ contentVersionId: t.cv, applicationId: t.app, documentType: "Transcript", sequence: 1, driveFileId: "drive-file-old" },
+		1,
+	);
+}
+
+describe("queue consumer: finishing files filed before screening", () => {
+	it("screens it and files the review, leaving a clean file where it is", async () => {
+		const t = newIds();
+		await filedBeforeScreening(t);
+		const w = world({ record: recordFor(t.app) });
+
+		const result = await run(jobFor(t), w.fetchFn);
+
+		expect(result.explicitAcks).toEqual(["msg-1"]);
+		expect(w.of("gemini")).toHaveLength(1);
+		expect(w.of("sfReviewCreate")).toHaveLength(1);
+		expect(w.of("uploadStart")).toHaveLength(0);
+		expect(w.of("rename")).toHaveLength(0);
+		expect(await auditRows(t.cv)).toEqual([
+			{ stage: "screen", event: "screened", reason: "pass", attempt: 1, final: null, sequence: null },
+		]);
+	});
+
+	it("renames a file the screener flags, keeping its number", async () => {
+		const t = newIds();
+		await filedBeforeScreening(t);
+		const w = world({ record: recordFor(t.app), answer: TAMPERED });
+
+		await run(jobFor(t), w.fetchFn);
+
+		const rename = w.of("rename")[0];
+		expect(rename.url).toContain("/drive/v3/files/drive-file-old");
+		expect(JSON.parse(String(rename.init?.body))).toEqual({ name: "[FLAGGED] Shah Rajvi Transcript #1.pdf" });
+		expect(w.of("uploadStart")).toHaveLength(0);
+	});
+
+	it("is finished after that: a redelivery calls nothing", async () => {
+		const t = newIds();
+		await filedBeforeScreening(t);
+		await run(jobFor(t), world({ record: recordFor(t.app) }).fetchFn);
+
+		const w = world({ record: recordFor(t.app) });
+		const result = await run(jobFor(t), w.fetchFn);
+
+		expect(result.explicitAcks).toEqual(["msg-1"]);
+		expect(w.all).toHaveLength(0);
+	});
+
+	it("leaves a held file alone, without calling anything", async () => {
+		const t = newIds();
+		await filedBeforeScreening(t);
+		await db.prepare("INSERT INTO screen_holds (content_version_id, reason, held_at) VALUES (?, ?, ?)").bind(t.cv, "eval_test_set", 1).run();
+		const w = world({ record: recordFor(t.app) });
+
+		const result = await run(jobFor(t), w.fetchFn);
+
+		expect(result.explicitAcks).toEqual(["msg-1"]);
+		expect(w.all).toHaveLength(0);
+		expect(await auditRows(t.cv)).toEqual([
+			{ stage: "screen", event: "deferred", reason: "held", attempt: 1, final: null, sequence: null },
+		]);
+	});
+
+	it("retries a failed rename, and the retry renames without screening again", async () => {
+		loggedErrors();
+		const t = newIds();
+		await filedBeforeScreening(t);
+		const first = world({ record: recordFor(t.app), answer: TAMPERED, status: { rename: 500 } });
+
+		const result = await run(jobFor(t), first.fetchFn);
+
+		expect(result.retryMessages).toEqual(retried);
+		expect(first.of("sfReviewCreate")).toHaveLength(1);
+		// No screening row yet, so neither the reconciler nor a redelivery treats it as finished.
+		expect(await auditRows(t.cv)).toEqual([
+			{ stage: "intake", event: "failed", reason: "rename_unavailable", attempt: 1, final: 0, sequence: null },
+		]);
+
+		const second = world({ record: recordFor(t.app), reviews: ["tampering_suspected"] });
+		await run(jobFor(t), second.fetchFn, 2);
+
+		expect(second.of("gemini")).toHaveLength(0);
+		expect(second.of("sfReviewCreate")).toHaveLength(0);
+		expect(second.of("rename")).toHaveLength(1);
+		expect((await auditRows(t.cv)).at(-1)).toMatchObject({ stage: "screen", event: "already_screened", reason: "tampering_suspected" });
 	});
 });

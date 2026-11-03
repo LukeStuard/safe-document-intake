@@ -21,7 +21,9 @@ export type DriveFailure =
 	| "folder_unavailable"
 	| "upload_rejected"
 	| "upload_unavailable"
-	| "session_invalid";
+	| "session_invalid"
+	| "rename_rejected"
+| 	  "rename_unavailable";
 
 export class DriveError extends Error {
 	constructor(
@@ -181,4 +183,19 @@ export async function uploadFile(token: string, file: UploadRequest, fetchFn: ty
 	);
 	await check(put, "upload_rejected", "upload_unavailable");
 	return readId(put, "upload_rejected");
+}
+
+// Renames a file the app created, which drive.file allows. Used to flag files filed before screening existed.
+export async function renameFile(token: string, fileId: string, name: string, fetchFn: typeof fetch = fetch): Promise<void> {
+	const response = await send(
+		fetchFn,
+		`${FILES_URL}/${encodeURIComponent(fileId)}?fields=id`,
+		{
+			method: "PATCH",
+			headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=UTF-8" },
+			body: JSON.stringify({ name }),
+		},
+		"rename_unavailable",
+	);
+	await check(response, "rename_rejected", "rename_unavailable");
 }

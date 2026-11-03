@@ -65,3 +65,23 @@ export async function givenUpVersions(db: D1Database): Promise<Set<string>> {
 		.all<{ content_version_id: string }>();
 	return new Set(results.map((r) => r.content_version_id));
 }
+
+// Whether this version's screening is finished: its review is filed and, for a file filed before screening
+// existed, any rename is done (the consumer writes this row last). A missing row, say from a failed best-effort
+// write, only costs a harmless second pass: the consumer finds the existing review and reuses it.
+export async function isScreened(db: D1Database, contentVersionId: string): Promise<boolean> {
+	const row = await db
+		.prepare(
+			"SELECT 1 AS done FROM audit_log WHERE content_version_id = ? AND stage = 'screen' AND event IN ('screened', 'already_screened') LIMIT 1",
+		)
+		.bind(contentVersionId)
+		.first();
+	return row !== null;
+}
+
+export async function screenedVersions(db: D1Database): Promise<Set<string>> {
+	const { results } = await db
+		.prepare("SELECT DISTINCT content_version_id FROM audit_log WHERE stage = 'screen' AND event IN ('screened', 'already_screened')")
+		.all<{ content_version_id: string }>();
+	return new Set(results.map((r) => r.content_version_id));
+}
