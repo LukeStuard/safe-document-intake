@@ -1,6 +1,7 @@
 // Salesforce access for the queue consumer, as the intake pipeline user.
 // Never logs or returns tokens, and only ever fetches the one file it's asked for.
 import type { ItemDetails } from "./layout";
+import type { ScreenResult } from "./screener";
 export interface SalesforceEnv {
 	SF_INSTANCE_URL: string;
 	SF_CLIENT_ID: string;
@@ -20,7 +21,9 @@ export type SalesforceFailure =
 	| "download_unavailable"
 	| "item_not_found"
 	| "details_rejected"
-	| "details_unavailable";
+	| "details_unavailable"
+	| "review_rejected"
+|     "review_unavailable";
 
 // `retryable` decides between a queue retry (Salesforce is having a moment) and giving up (retrying can't help).
 export class SalesforceError extends Error {
@@ -219,4 +222,85 @@ export async function listLatestVersions(env: SalesforceEnv, token: string, fetc
 	}
 	// More than 50 pages means something is wrong, not that the org is big.
 	throw new SalesforceError("details_rejected", false);
+}
+
+
+export interface ReviewInput {
+	checklistItemId: string;
+	contentVersionId: string;
+	model: string;
+	result: ScreenResult;
+}
+
+export type ReviewOutcome = { status: "created"; id: string } | { status: "duplicate" };
+
+// Field lengths on Document_Review__c. Longer model output is trimmed rather than failing the insert.
+const REVIEW_LIMITS = { model: 80, detectedType: 255, screenFailure: 40, longText: 32768 } as const;
+
+function clip(value: string, max: number): string {
+	if (value.length <= max) return value;
+	const cut = value.slice(0, max);
+	// Don't leave half of a two-part character (an emoji, say) at the end.
+	return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+}
+
+// Files the screener's first pass as a Document_Review__c, as the pipeline user.
+// Decision__c is left out: it defaults to Pending, and the pipeline can't set it anyway.
+// A replayed job hits the unique file-version rule and comes back as "duplicate", not an error.
+export async function createReview(
+	env: SalesforceEnv,
+	token: string,
+	input: ReviewInput,
+	fetchFn: typeof fetch = fetch,
+): Promise<ReviewOutcome> {
+	const url = `${baseUrl(env)}/services/data/v${apiVersion(env)}/sobjects/Document_Review__c`;
+	const { result } = input;
+	const fields: Record<string, string> = {
+		Checklist_Item__c: input.checklistItemId,
+		Content_Version_Id__c: input.contentVersionId,
+		Model__c: clip(input.model, REVIEW_LIMITS.model),
+		Verdict__c: result.verdict,
+	};
+	// Empty values are left out rather than sent as blanks.
+	if (result.reasons) fields.Reasons__c = clip(result.reasons, REVIEW_LIMITS.longText);
+	if (result.tamperingExcerpt) fields.Tampering_Excerpt__c = clip(result.tamperingExcerpt, REVIEW_LIMITS.longText);
+	if (result.detectedType) fields.Detected_Type__c = clip(result.detectedType, REVIEW_LIMITS.detectedType);
+	if (result.failure) fields.Screen_Failure__c = clip(result.failure, REVIEW_LIMITS.screenFailure);
+
+	let response: Response;
+	try {
+		response = await fetchFn(url, {
+			method: "POST",
+			headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+			body: JSON.stringify(fields),
+		});
+	} catch {
+		throw new SalesforceError("review_unavailable", true);
+	}
+
+	if (isTransient(response.status)) throw new SalesforceError("review_unavailable", true);
+
+	if (response.status === 201) {
+		let data: unknown;
+		try {
+			data = await response.json();
+		} catch {
+			throw new SalesforceError("review_rejected", false);
+		}
+		const id = (data as { id?: unknown } | null)?.id;
+		if (typeof id !== "string" || id === "") throw new SalesforceError("review_rejected", false);
+		return { status: "created", id };
+	}
+
+	// Salesforce reports errors as a list of { errorCode, message }.
+	let errors: unknown = null;
+	try {
+		errors = await response.json();
+	} catch {
+		// Unreadable error body: treated as a rejection below.
+	}
+	if (Array.isArray(errors) && errors.some((e) => (e as { errorCode?: unknown } | null)?.errorCode === "DUPLICATE_VALUE")) {
+		return { status: "duplicate" };
+	}
+	throw new SalesforceError("review_rejected", false);
 }

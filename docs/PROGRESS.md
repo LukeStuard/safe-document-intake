@@ -289,3 +289,13 @@
 - Field access: Integration and Admin read and edit (Integration still can't update reviews, since it has no object edit), Reviewer read only. Verified live through `FieldPermissions`.
 - New Apex test `screenerDetailsAreSetOnCreateThenLocked`: the pipeline user sets both fields on insert through its own permissions, then admin edits to either (including clearing the failure code) are blocked.
 - Apex: 12 review-rule tests and 9 trigger-sender tests passing. Finding: the CLI's "Tests Ran" counts each `@TestSetup` method as a test, so it reads 2 higher than the real count.
+
+## 2026-11-03: createReview
+
+- `createReview` in `worker/src/salesforce.ts` files the screener's first pass as a `Document_Review__c`, as the pipeline user. 9 new tests with a mocked `fetch`.
+- Never sends `Decision__c`: it defaults to Pending, and the pipeline has no edit access to it.
+- A replayed job gets `DUPLICATE_VALUE` from the unique file-version field and returns `duplicate`, so the consumer can treat the file as already reviewed.
+- Model output is trimmed to each field's length without splitting a two-part character, so an overlong answer can't fail the insert and lose the verdict. Empty values are left out, not sent as blanks.
+- Transient failures (network, 429, 5xx) are retryable; validation errors and a success without an ID are not.
+- No live insert yet, on purpose: reviews can't be deleted, so a probe record would stay in the audit trail. The first real one comes with the reordered consumer.
+- Full suite: 172 passing across 14 files.
