@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Detected_Type__c</fullName>
+    <description
+  >What the automated screener read the document as, in a few words. Set by the pipeline when the review is created; compare with the checklist item's document type.</description>
+    <externalId>false</externalId>
+    <inlineHelpText
+  >What the screener read this document as. A difference from the filed type is worth a look.</inlineHelpText>
+    <label>Detected Type</label>
+    <length>255</length>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

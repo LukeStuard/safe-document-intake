@@ -281,3 +281,11 @@
 - Days are counted in Pacific time, since that's when Google resets the daily quota (per the Gemini rate limits docs). Tested on both sides of midnight in winter (UTC-8) and summer (UTC-7).
 - A call that fails after its reservation still counts, since Google counts the request too. Rows are kept, which leaves a per-day call history for the write-up.
 - 8 new tests; full suite 163 passing across 13 files. Migration applied to the live `AUDIT_DB`, table confirmed empty.
+
+## 2026-11-03: Screener details on Document_Review__c
+
+- New fields `Detected_Type__c` (text 255, what the screener read the document as) and `Screen_Failure__c` (text 40, why an answer was rejected and the verdict failed closed; blank when accepted). Filterable, so Phase 4 can count failures by cause without parsing reasons.
+- `Verdict_Is_Immutable` now covers both, so they're locked after creation like the rest of the first pass, admins included.
+- Field access: Integration and Admin read and edit (Integration still can't update reviews, since it has no object edit), Reviewer read only. Verified live through `FieldPermissions`.
+- New Apex test `screenerDetailsAreSetOnCreateThenLocked`: the pipeline user sets both fields on insert through its own permissions, then admin edits to either (including clearing the failure code) are blocked.
+- Apex: 12 review-rule tests and 9 trigger-sender tests passing. Finding: the CLI's "Tests Ran" counts each `@TestSetup` method as a test, so it reads 2 higher than the real count.

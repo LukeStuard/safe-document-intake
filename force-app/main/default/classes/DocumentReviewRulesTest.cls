@@ -261,6 +261,39 @@ private class DocumentReviewRulesTest {
     Assert.areEqual('pass', reload(r.Id).Verdict__c);
   }
 
+  @IsTest
+  static void screenerDetailsAreSetOnCreateThenLocked() {
+    // The pipeline fills these in when it files the review, through its own field permissions...
+    Document_Review__c r = review('068000000000013AAA');
+    r.Verdict__c = 'needs_human';
+    r.Detected_Type__c = 'Unofficial transcript';
+    r.Screen_Failure__c = 'reasons_too_long';
+    System.runAs(pipelineUser()) {
+      insert r;
+    }
+    Document_Review__c stored = [
+      SELECT Detected_Type__c, Screen_Failure__c
+      FROM Document_Review__c
+      WHERE Id = :r.Id
+    ];
+    Assert.areEqual('Unofficial transcript', stored.Detected_Type__c);
+    Assert.areEqual('reasons_too_long', stored.Screen_Failure__c);
+
+    // ...and after that nobody can change them, admins included.
+    Test.startTest();
+    expectUpdateBlocked(
+      new Document_Review__c(Id = r.Id, Detected_Type__c = 'Resume'),
+      null,
+      'first-pass verdict'
+    );
+    expectUpdateBlocked(
+      new Document_Review__c(Id = r.Id, Screen_Failure__c = null),
+      null,
+      'first-pass verdict'
+    );
+    Test.stopTest();
+  }
+
   // ---------- Decision stamp ----------
 
   @IsTest

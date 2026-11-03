@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Screen_Failure__c</fullName>
+    <description
+  >Why the screener's answer was rejected and the verdict failed closed (for example not_json or reasons_too_long). Blank when the answer was accepted as given.</description>
+    <externalId>false</externalId>
+    <inlineHelpText
+  >Blank means the screener's answer was accepted. Anything here means it was rejected and the verdict was set to needs_human or tampering_suspected.</inlineHelpText>
+    <label>Screen Failure</label>
+    <length>40</length>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>
