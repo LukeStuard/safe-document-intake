@@ -319,3 +319,12 @@
 - Known limitation, unchanged: if Drive accepts the file but the D1 batch then fails, the retry uploads a second copy.
 - Finding: `getQueueResult` records that a message was retried but not its delay, so the pacing test watches `message.retry` directly.
 - Consumer tests rewritten: 22 (was 12). Full suite 186 passing across 14 files.
+
+## 2026-11-03: First live end-to-end run
+
+- `GEMINI_API_KEY` set as a Worker secret, piped from Credential Manager; deployed as version `0f24566e`.
+- Smoke test with a one-off synthetic personal statement (made in the git-ignored `eval/scratch/`, so neither eval set was touched), attached by the admin to an empty checklist slot with `sf data create file`.
+- Result, first attempt: signed hook accepted and queued, screened `pass` by `gemini-3.5-flash-lite` (detected type "Personal Statement", no screen failure), review filed as `Pending` by the Intake Pipeline user, then uploaded to Drive as `#1`, unflagged.
+- Audit trail: `queued`, then `screen`/`screened` (`pass`) about 5 seconds later (the Gemini call), then `uploaded` 2 seconds after that. About 7 seconds from attach to Drive.
+- The reasons text followed the prompt's rule: no applicant name, no ID numbers.
+- Finding: wrangler D1 commands in a terminal without the intake token loaded fail with 7403 ("account not valid or not authorized"), not an auth prompt. Load `Use-IntakeCloudflare.ps1` in every terminal that talks to Cloudflare.
