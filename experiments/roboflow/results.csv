@@ -1,0 +1,13 @@
+file,true_class,predicted_class,confidence,correct
+doc-0013_png.rf.acca28048b0cbff5f2378815de79ce78.jpg,id_card,id_card,0.9407,True
+doc-0028_png.rf.0551822226ca8cc7df7a630e7ef6259b.jpg,id_card,id_card,0.9452,True
+doc-0034_png.rf.5e36d4812928f2a3632acf90a83fdb8e.jpg,id_card,id_card,0.9420,True
+doc-0045_png.rf.f5b5221c249f71949e7a70d014842db5.jpg,id_card,id_card,0.9450,True
+doc-0049_png.rf.c18919905b781ab9cd53fa44c4425ad1.jpg,id_card,id_card,0.9531,True
+doc-0056_png.rf.35226b27a66528c96dd271fd692609ca.jpg,personal_statement,personal_statement,0.4836,True
+doc-0059_png.rf.268a847dfeca282088eeb6ba9e94a200.jpg,personal_statement,recommendation_letter,0.6639,False
+doc-0047_png.rf.cefde4b9ca850ff807ef358f981879bd.jpg,recommendation_letter,recommendation_letter,0.5331,True
+doc-0015_png.rf.d7741b2ee4867f51fb2a9e7bef0ec274.jpg,resume,resume,0.9600,True
+doc-0042_png.rf.7c6cd1a3fe918710d5c26ee57fd47c08.jpg,resume,resume,0.9550,True
+doc-0024_png.rf.a2fa8f3c751f702ab57deaba52cc4395.jpg,transcript,transcript,0.9951,True
+doc-0020_png.rf.4abb8c15ca5a8a32cbec2f6d27e04340.jpg,unreadable,unreadable,0.9717,True

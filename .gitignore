@@ -61,3 +61,5 @@ eval/*/load_result.json
 eval/scratch/
 eval/.venv/
 eval/applications.json
+experiments/roboflow/.env
+experiments/roboflow/data/
