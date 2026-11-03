@@ -115,3 +115,42 @@ export function parseResponse(body: unknown): ScreenResult {
 		failure: null,
 	};
 }
+
+
+export const SCREEN_MODEL: string = spec.model;
+
+// Gemini failures that aren't the model's answer: the request didn't arrive, was throttled, or was refused.
+export class ScreenError extends Error {
+	constructor(
+		readonly reason: "screen_unavailable" | "screen_rejected",
+		readonly retryable: boolean,
+	) {
+		super(reason);
+		this.name = "ScreenError";
+	}
+}
+
+// Sends one document to Gemini. The key goes in a header, never the URL, so it can't end up in a log of URLs.
+export async function callScreener(apiKey: string, input: ScreenInput, fetchFn: typeof fetch = fetch): Promise<ScreenResult> {
+	const url = `https://generativelanguage.googleapis.com/v1beta/models/${spec.model}:generateContent`;
+	let response: Response;
+	try {
+		response = await fetchFn(url, {
+			method: "POST",
+			headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+			body: JSON.stringify(buildRequest(input)),
+		});
+	} catch {
+		throw new ScreenError("screen_unavailable", true);
+	}
+	if (response.status === 429 || response.status >= 500) throw new ScreenError("screen_unavailable", true);
+	if (!response.ok) throw new ScreenError("screen_rejected", false);
+
+	let body: unknown = null;
+	try {
+		body = await response.json();
+	} catch {
+		// An unreadable answer fails closed in parseResponse.
+	}
+	return parseResponse(body);
+}

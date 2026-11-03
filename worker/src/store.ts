@@ -60,13 +60,17 @@ export async function nextSequence(db: D1Database, applicationId: string, docume
 }
 
 // A plain insert on purpose: recording the same ContentVersion twice is a bug, and should throw.
-export async function recordUpload(db: D1Database, record: UploadRecord, now: number): Promise<void> {
-	await db
+// The statement form lets the consumer write it in one batch with its audit row.
+export function recordUploadStatement(db: D1Database, record: UploadRecord, now: number): D1PreparedStatement {
+	return db
 		.prepare(
 			"INSERT INTO drive_uploads (content_version_id, application_id, document_type, sequence, drive_file_id, uploaded_at) VALUES (?, ?, ?, ?, ?, ?)",
 		)
-		.bind(record.contentVersionId, record.applicationId, record.documentType, record.sequence, record.driveFileId, now)
-		.run();
+		.bind(record.contentVersionId, record.applicationId, record.documentType, record.sequence, record.driveFileId, now);
+}
+
+export async function recordUpload(db: D1Database, record: UploadRecord, now: number): Promise<void> {
+	await recordUploadStatement(db, record, now).run();
 }
 
 export async function uploadedVersions(db: D1Database): Promise<Set<string>> {
