@@ -60,3 +60,4 @@ eval/scratch/
 eval/.venv/
 eval/out/
 eval/applications.json
+eval/dev/out/
