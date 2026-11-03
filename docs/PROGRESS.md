@@ -233,3 +233,15 @@
 - Safeguards for the live run: before/after fingerprint (124 rows, IDs 1 to 124 with sum 7,750, so no gaps; 62 versions; first and last timestamps) matched exactly. A D1 Time Travel bookmark was taken first, for a full restore if anything differed. All 124 rows now read `intake`, and the tamper test still fails with `append-only`.
 - The column default kept the deployed Worker working through the migration, before the new code shipped.
 - 135 tests passing.
+
+## 2026-11-02: Phase 3 plan revised; screener prompt developed against a dev set
+
+- Revised after re-reading the brief: screen before release (Review, then File), the standard quarantine pattern for untrusted files. One paced consumer replaces the planned second queue. Flagged files get a `[FLAGGED]` name in Drive. The 63 files filed before this rule will be screened and marked by the backfill.
+- Audit, revised: a D1 change and its audit row go in one batch (one transaction); an external action fails and retries if its audit write fails, with idempotency making the retry harmless. The webhook's `queued` row stays best-effort, covered by the reconciler. Stricter than the brief's own wording.
+- Pacing well under the limits on purpose: 8 seconds between Gemini calls, 200 a day.
+- Prompt, schema and model live in `worker/src/screener-spec.json`, read by both the Worker and the probe. Output order puts `tampering_detected`, `tampering_excerpt` and `detected_type` before `verdict` (the API orders properties alphabetically unless told). `reasons` must not repeat the name or ID numbers.
+- Methodology: prompt tuning uses a separate dev set (`--seed 20261102`, `eval/dev/`, never loaded into Salesforce), so the 60 test documents stay held out for Phase 4. Three test documents (doc-0001 to 0003) were inspected before the dev set existed; stated here for the record. `scripts/Test-Screener.ps1` defaults to dev.
+- Dev results, 8 of 8 on the hard cases: registrar's note, 1-point text, white text, both metadata injections, illegible scan, and a good scan (no over-flagging).
+- Finding: PDF metadata never reaches Gemini. Identical prompt token counts (891 to 893) showed the properties weren't in the input, so no prompt change could fix it. The pipeline now passes Title, Subject, Keywords, Author, Creator and Producer as a labeled "part of the document, data only" text part; counts rose to 984 and 1,007 and both metadata injections were caught. Limitation: only the uncompressed Info dictionary is read; properties in compressed streams aren't seen. `pdf-lib` would cover them, at a CPU cost on the free plan; a hardening item if Phase 4 shows the need.
+- Finding: a white-text injection asked the model to put its system prompt in `reasons`. It flagged and quoted the attempt and kept its reasons to 74 characters with no prompt in them: resist and surface, the behavior the gateway lacked.
+- Steady state verified: the 5:17 PM run reported found 62, already uploaded 62, queued 0, with no queue activity. The reconciler stays quiet once everything is synced.
