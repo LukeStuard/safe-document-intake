@@ -273,3 +273,11 @@
 - Fail closed: a missing candidate, non-STOP finish, missing or non-JSON text, off-list verdict, wrong field types or reasons over 300 characters all become `needs_human`, with the cause in `failure`. Nothing throws.
 - Exception for tampering: if the flag or the verdict signals tampering, a rejected answer still comes out `tampering_suspected` with its excerpt, so the reviewer's warning doesn't depend on the model formatting everything correctly.
 - Full suite: 155 passing across 12 files.
+
+## 2026-11-03: Gemini pacing in D1
+
+- `worker/src/pacing.ts` with migration `0005_gemini_pacing.sql`: every Gemini call is reserved in D1 first, at most one per 8 seconds and 200 a day, well under the free tier's 15 a minute and 500 a day.
+- One `INSERT ... SELECT ... WHERE` checks both limits and records the call in a single statement, so two runs can't both slip through. A refusal says which limit and how long to wait: the rest of the gap, or an hour once the day's budget is spent.
+- Days are counted in Pacific time, since that's when Google resets the daily quota (per the Gemini rate limits docs). Tested on both sides of midnight in winter (UTC-8) and summer (UTC-7).
+- A call that fails after its reservation still counts, since Google counts the request too. Rows are kept, which leaves a per-day call history for the write-up.
+- 8 new tests; full suite 163 passing across 13 files. Migration applied to the live `AUDIT_DB`, table confirmed empty.
