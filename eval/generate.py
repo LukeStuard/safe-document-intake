@@ -4,10 +4,10 @@ Safe Document Intake: eval set generator.
 Reads eval/applications.json (exported from the org with `sf data query --json`), picks a
 seeded sample of applications, and writes:
 
-  eval/out/pdfs/doc-NNNN.pdf   synthetic documents, neutral file names
-  eval/out/plan.json           which application and checklist slot each file goes to (for load.py)
-  eval/manifest.json           the answer key: expected verdict and test category per file
-
+  eval/test/pdfs/doc-NNNN.pdf   synthetic documents, neutral file names
+  eval/test/plan.json           which application and checklist slot each file goes to (for load.py)
+  eval/test/manifest.json       the answer key: expected verdict and test category per file
+  
 Everything is fictional: invented institutions, a fictional "State of Northfield", SPECIMEN
 watermarks, example.com contact details. Names come from the org's synthetic applicants.
 
@@ -296,8 +296,8 @@ def build(applications, seed):
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--applications", default="eval/applications.json")
-    p.add_argument("--out", default="eval/out")
-    p.add_argument("--manifest", default="eval/manifest.json")
+    p.add_argument("--out", default="eval/test")
+    p.add_argument("--manifest", default="eval/test/manifest.json")
     p.add_argument("--seed", type=int, default=SEED)
     args = p.parse_args()
 
@@ -317,10 +317,9 @@ def main():
 
     Path(args.out, "plan.json").write_text(json.dumps(
         {"seed": args.seed, "applications": [a["Id"] for a in apps], "documents": plan, "empty_slots": empty},
-        indent=2), encoding="utf-8")
+        indent=2) + "\n", encoding="utf-8", newline="\n")
     Path(args.manifest).write_text(json.dumps(
-        {"seed": args.seed, "counts": COUNTS, "documents": manifest}, indent=2), encoding="utf-8")
-
+        {"seed": args.seed, "counts": COUNTS, "documents": manifest}, indent=2) + "\n", encoding="utf-8", newline="\n")
     by_cat = {}
     for m in manifest:
         by_cat[m["category"]] = by_cat.get(m["category"], 0) + 1

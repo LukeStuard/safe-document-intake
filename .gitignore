@@ -54,10 +54,10 @@ $RECYCLE.BIN/
 .env.*
 .wrangler/
 
-# Eval output
-eval/out/
+## Eval output: generated PDFs, plans and load results are reproducible from the seed; manifests are committed
+eval/*/pdfs/
+eval/*/plan.json
+eval/*/load_result.json
 eval/scratch/
 eval/.venv/
-eval/out/
 eval/applications.json
-eval/dev/out/
