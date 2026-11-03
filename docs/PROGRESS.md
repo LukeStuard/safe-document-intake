@@ -338,3 +338,10 @@
 - The reconciler queues in-Drive files that have no screening row and no hold, and reports `unscreened` and `held` counts.
 - `renameFile` in `drive.ts` (PATCH, allowed under `drive.file` for files the app created).
 - 7 new tests (5 consumer, 2 reconciler); full suite 193 passing across 14 files.
+
+## 2026-11-03: Backfill run, live
+
+- Deployed as version `9ecf2000`. The 1:17 PM reconciler run found 63 files: 60 held (test set), 1 already finished (the smoke test), 2 unscreened and queued. The held files never reached the queue.
+- Both backfilled files were placeholders from earlier probes (a mock CPT application and a flyer), filed on slots for other document types. Both screened `wrong_type`, correctly, with detected types "CPT Application" and "promotional flyer", and no renames needed.
+- Pacing, live: the second job arrived 6 seconds after the first, was deferred (`too_soon`, retry in 3 s) and finished on attempt 2.
+- Org check: exactly 3 `Document_Review__c` records, all filed by Intake Pipeline with `gemini-3.5-flash-lite`. The test set is untouched.
