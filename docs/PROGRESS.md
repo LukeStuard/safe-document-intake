@@ -223,3 +223,13 @@
 - Measured pace: about one job every 3.5 seconds, roughly 17 a minute. That's above Gemini Flash-Lite's 15 requests per minute, so Phase 3 must slow the consumer down.
 - Practice: run Wrangler from `worker/`. From the repo root, `npx` found Wrangler 4.69.0 and skipped `wrangler.jsonc`, including the pinned `account_id`.
 - Phase 2 complete: signed trigger, queue, consumer, Salesforce download, Drive upload in the original sync's layout, append-only audit trail, hourly reconciler. 133 tests passing.
+
+## 2026-11-02: Phase 3 design, and the audit log rebuilt for a second stage
+
+- Phase 3 design: screening runs on its own queue (`screen-documents`), fed after a successful upload. Uploads stay fast and independent of Gemini; a failed screening never redoes an upload. Cost: the screener downloads the file again from Salesforce, kept as the single source of truth (queue messages max out at 128 KB).
+- Pacing well under the free tier on purpose: 8 seconds between Gemini calls (about 7.5 a minute, half of 15) and a 200-a-day cap (40% of 500). Spent budget means a delayed retry, at most 12 hours (Cloudflare's limits page gives 12 in one version and 24 in another, so the design works under either). Max retries can go to 100. The reconciler will also catch files in Drive with no review.
+- Migration `0004_audit_log_stages.sql` rebuilds `audit_log` with `stage` (`intake`/`screen`, default `intake`), the events `screened`, `already_screened` and `deferred`, and a `model` column. SQLite can't change a `CHECK` in place.
+- Honest scope of "append-only": the triggers stop the Worker and ordinary queries from rewriting history (proven twice in production). A schema migration can still drop them, and this one did, to rebuild the table. That's the deliberate exception, done once, logged here.
+- Safeguards for the live run: before/after fingerprint (124 rows, IDs 1 to 124 with sum 7,750, so no gaps; 62 versions; first and last timestamps) matched exactly. A D1 Time Travel bookmark was taken first, for a full restore if anything differed. All 124 rows now read `intake`, and the tamper test still fails with `append-only`.
+- The column default kept the deployed Worker working through the migration, before the new code shipped.
+- 135 tests passing.
