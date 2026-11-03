@@ -1,7 +1,7 @@
 """
 Safe Document Intake: loads the generated eval set into the Salesforce dev org.
 
-Reads eval/out/plan.json (from generate.py), then, as the org admin via the sf CLI:
+Reads eval/test/plan.json (from generate.py), then, as the org admin via the sf CLI:
   1. creates a Checklist_Item__c for every slot on the selected applications (100 for 20 apps),
      Received where a file is attached, Not Received otherwise
   2. uploads each PDF as a Salesforce File attached to its checklist item
@@ -70,7 +70,7 @@ class Org:
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--target-org", default="gatewayDev")
-    p.add_argument("--out", default="eval/out")
+    p.add_argument("--out", default="eval/test")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 

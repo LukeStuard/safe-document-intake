@@ -18,7 +18,7 @@ if (-not $File -and -not $All) { throw "Pass -File <name> or -All." }
 
 $root     = Resolve-Path "$PSScriptRoot\.."
 $spec     = Get-Content "$root\worker\src\screener-spec.json" -Raw | ConvertFrom-Json
-$setRoot  = if ($Set -eq "dev") { "$root\eval\dev" } else { "$root\eval" }
+$setRoot  = if ($Set -eq "dev") { "$root\eval\dev" } else { "$root\eval\test" }
 $manifest = Get-Content "$setRoot\manifest.json" -Raw | ConvertFrom-Json
 $verdicts = $spec.responseSchema.properties.verdict.enum
 
@@ -36,7 +36,7 @@ $names = @{}
     ForEach-Object { $names[$_.Id.Substring(0, 15)] = $_.Applicant_Name__c }
 
 function Invoke-Screen($doc, $key) {
-    $pdf = Get-ChildItem "$setRoot\out" -Recurse -Filter $doc.file | Select-Object -First 1
+    $pdf = Get-ChildItem "$setRoot\pdfs" -Recurse -Filter $doc.file | Select-Object -First 1
     if (-not $pdf) { throw "Can't find $($doc.file) in the $Set set." }
     $bytes = [IO.File]::ReadAllBytes($pdf.FullName)
 

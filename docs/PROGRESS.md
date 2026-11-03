@@ -254,3 +254,11 @@
 - Consequence for Phase 4: one run of the test set isn't a stable measurement. Plan to run it several times and report the range plus which documents flip. Check Google's current guidance on temperature for this model before changing it.
 - Probe now retries 503s as well as 429s, as the Worker will through the queue.
 - Process note: two test documents (doc-0018, doc-0054) were opened by mistake while looking for their dev namesakes. `eval/out` (test) and `eval/dev/out` (dev) hold identically named files one level apart. Viewed only, nothing tuned; the test files' hashes and timestamps confirm the dev run never touched them. Restructuring to `eval/test/` and `eval/dev/` is first on the next session's list.
+
+## 2026-11-03: Eval sets restructured
+
+- Each eval set now lives in its own folder holding everything for that set: `eval/test/` and `eval/dev/`, each with `pdfs/`, `plan.json`, `manifest.json` and (for test) `load_result.json`. The old `out/` subfolders are gone.
+- `generate.py`, `load.py` and `scripts/Test-Screener.ps1` updated to the new paths, docstrings included.
+- `.gitignore` now uses set-agnostic rules (`eval/*/pdfs/`, `eval/*/plan.json`, `eval/*/load_result.json`). Manifests stay committed as the answer keys.
+- Verified the move: a fresh generation into a temp folder matched all 60 test PDFs byte for byte.
+- Finding: the regenerated manifest's hash differed even though its content matched. Two causes: Python on Windows writes CRLF while `.gitattributes` pins LF, and the precommit hook's `prettier --write` adds a trailing newline to committed JSON. `generate.py` now writes LF with a final newline, so a fresh manifest is byte-identical to the committed one.
