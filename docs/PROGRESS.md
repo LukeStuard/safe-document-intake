@@ -262,3 +262,14 @@
 - `.gitignore` now uses set-agnostic rules (`eval/*/pdfs/`, `eval/*/plan.json`, `eval/*/load_result.json`). Manifests stay committed as the answer keys.
 - Verified the move: a fresh generation into a temp folder matched all 60 test PDFs byte for byte.
 - Finding: the regenerated manifest's hash differed even though its content matched. Two causes: Python on Windows writes CRLF while `.gitattributes` pins LF, and the precommit hook's `prettier --write` adds a trailing newline to committed JSON. `generate.py` now writes LF with a final newline, so a fresh manifest is byte-identical to the committed one.
+
+## 2026-11-03: Screener request builder and fail-closed parsing
+
+- `worker/src/screener.ts` builds the Gemini request from `screener-spec.json` and turns the answer into a verdict. 20 new tests.
+- Payload guarantee is structural: `buildRequest` destructures only the PDF, the filed type and the applicant name. The test passes an application ID and email alongside and asserts neither reaches the request body.
+- Document properties are read from the uncompressed Info dictionary and sent as a separate part, deduplicated, the same as the probe. Same limitation: properties in compressed streams aren't seen.
+- Templates are filled in one pass through a function replacement, so a `$&` or `{type}` inside a name is inserted literally.
+- Base64 via `btoa` over a chunked byte-to-string conversion (no `nodejs_compat`, so no `Buffer`); tested with a 3 MB file.
+- Fail closed: a missing candidate, non-STOP finish, missing or non-JSON text, off-list verdict, wrong field types or reasons over 300 characters all become `needs_human`, with the cause in `failure`. Nothing throws.
+- Exception for tampering: if the flag or the verdict signals tampering, a rejected answer still comes out `tampering_suspected` with its excerpt, so the reviewer's warning doesn't depend on the model formatting everything correctly.
+- Full suite: 155 passing across 12 files.
