@@ -306,3 +306,16 @@
 - Brackets are now stripped from the person's name, so only the pipeline can produce the marker: an applicant named `[FLAGGED] Shah` in Salesforce gets `FLAGGED Shah ...`, never a look-alike flag. A name that is nothing but brackets is rejected as missing.
 - Layout stays verdict-agnostic; the consumer decides which verdicts are flagged.
 - 4 new tests; full suite 176 passing across 14 files.
+
+## 2026-11-03: Consumer reordered to review, then file
+
+- Per job: details, naming check, download, Drive token (moved up, so a bad Google token fails before a review is filed or a Gemini call is spent), then screen, `createReview`, upload, and the upload record with its audit row in one D1 batch.
+- Review before file: the verdict is in Salesforce before the file reaches Drive, so a flagged file is never in Drive unmarked. `tampering_suspected` files are named `[FLAGGED] ...`.
+- Redeliveries reuse the filed verdict (`findReview`), so a crash between review and upload costs no second Gemini call and can't produce a second, different verdict. If `createReview` loses a race (`DUPLICATE_VALUE`), the earlier delivery's verdict stands.
+- Pacing waits never use up a job: a short gap retries with a delay; a spent daily budget, or a wait on the last attempt, acks and leaves the job to the hourly reconciler.
+- A document is never lost to the screener: an outage retries, but on the last attempt, or when Gemini refuses the request, the file is still filed, held for a person (`needs_human`, with `screen_unavailable` or `screen_rejected`). `Model__c` reads `unscreened` whenever no model answered.
+- Screening is PDF-only. Other files are filed as `needs_human` with `unsupported_format`, without calling Gemini. What .docx screening would take is drafted in `docs/drafts/docx-extension.md`.
+- The Gemini key is sent in a header, never the URL. The applicant name is fetched for the screener only and never used in names or logs.
+- Known limitation, unchanged: if Drive accepts the file but the D1 batch then fails, the retry uploads a second copy.
+- Finding: `getQueueResult` records that a message was retried but not its delay, so the pacing test watches `message.retry` directly.
+- Consumer tests rewritten: 22 (was 12). Full suite 186 passing across 14 files.

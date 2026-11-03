@@ -124,6 +124,7 @@ export async function downloadVersion(
 export interface JobDetails {
 	item: ItemDetails;
 	fileExtension: string;
+	applicantName: string; // for the screener only: never used in names or logs
 }
 
 async function getJson(fetchFn: typeof fetch, url: string, token: string, notFound: SalesforceFailure): Promise<unknown> {
@@ -153,14 +154,14 @@ export async function getJobDetails(
 ): Promise<JobDetails> {
 	const base = `${baseUrl(env)}/services/data/v${apiVersion(env)}`;
 	const soql =
-		"SELECT Document_Type__c, Application__c, Application__r.Term__c, Application__r.Applicant_Folder_Name__c " +
+		"SELECT Document_Type__c, Application__c, Application__r.Term__c, Application__r.Applicant_Folder_Name__c, Application__r.Applicant_Name__c " +
 		`FROM Checklist_Item__c WHERE Id = '${job.checklistItemId}'`;
 
 	const result = (await getJson(fetchFn, `${base}/query?q=${encodeURIComponent(soql)}`, token, "item_not_found")) as {
 		records?: {
 			Document_Type__c?: unknown;
 			Application__c?: unknown;
-			Application__r?: { Term__c?: unknown; Applicant_Folder_Name__c?: unknown } | null;
+			Application__r?: { Term__c?: unknown; Applicant_Folder_Name__c?: unknown; Applicant_Name__c?: unknown } | null;
 		}[];
 	};
 	const record = result.records?.[0];
@@ -185,6 +186,7 @@ export async function getJobDetails(
 			folderName: text(record.Application__r?.Applicant_Folder_Name__c),
 		},
 		fileExtension: text(meta.FileExtension),
+		applicantName: text(record.Application__r?.Applicant_Name__c),
 	};
 }
 
@@ -303,4 +305,20 @@ export async function createReview(
 		return { status: "duplicate" };
 	}
 	throw new SalesforceError("review_rejected", false);
+}
+
+// The verdict already filed for this file version, if any. A redelivered job reuses it instead of screening again,
+// so a crash between review and upload costs neither a second Gemini call nor a second, different verdict.
+// The pipeline can read only the reviews it created. The ID has passed parseJob (alphanumeric only), so it's safe in a query.
+export async function findReview(
+	env: SalesforceEnv,
+	token: string,
+	contentVersionId: string,
+	fetchFn: typeof fetch = fetch,
+): Promise<string | null> {
+	const soql = `SELECT Verdict__c FROM Document_Review__c WHERE Content_Version_Id__c = '${contentVersionId}' LIMIT 1`;
+	const url = `${baseUrl(env)}/services/data/v${apiVersion(env)}/query?q=${encodeURIComponent(soql)}`;
+	const result = (await getJson(fetchFn, url, token, "details_rejected")) as { records?: { Verdict__c?: unknown }[] };
+	const verdict = result.records?.[0]?.Verdict__c;
+	return typeof verdict === "string" && verdict !== "" ? verdict : null;
 }

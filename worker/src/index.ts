@@ -8,6 +8,7 @@ import { SalesforceError } from "./salesforce";
 
 export type IntakeEnv = Env & {
 	SF_SIGNING_KEY: string;
+	GEMINI_API_KEY: string; // Worker secret, set from Credential Manager; never logged
 	SF_INSTANCE_URL: string;
 	SF_CLIENT_ID: string;
 	SF_CLIENT_SECRET: string;

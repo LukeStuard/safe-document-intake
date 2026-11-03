@@ -32,6 +32,10 @@ function insert(db: D1Database, entry: AuditEntry): D1PreparedStatement {
 		);
 }
 
+
+// The same insert as a statement, for callers that must write it atomically with something else.
+export const auditStatement = insert;
+
 export async function audit(db: D1Database, entry: AuditEntry): Promise<boolean> {
 	try {
 		await insert(db, entry).run();
