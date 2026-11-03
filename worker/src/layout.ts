@@ -5,6 +5,9 @@
 export const ROOT_FOLDER = "Safe Document Intake";
 export const STAGE_FOLDER = "Student-Admissions";
 
+// Leads the name of any file the screener flagged, so it's visible to anyone browsing the folder.
+export const FLAG_PREFIX = "[FLAGGED] ";
+
 // What the Worker reads from Salesforce for one checklist item.
 export interface ItemDetails {
 	applicationId: string;
@@ -52,11 +55,14 @@ export function studentFolder(folderName: string): string {
 	return name;
 }
 
-// "Shah, Rajvi" + "Transcript" + 2 + "pdf" -> "Shah Rajvi Transcript #2.pdf"
-export function fileName(folderName: string, documentType: string, sequence: number, extension: string): string {
-	const person = studentFolder(folderName).replace(/,/g, "").replace(/\s+/g, " ");
+// "Shah, Rajvi" + "Transcript" + 2 + "pdf" -> "Shah Rajvi Transcript #2.pdf", or with flagged,
+// "[FLAGGED] Shah Rajvi Transcript #2.pdf". Brackets are stripped from the name itself,
+// so only the pipeline can produce the marker.
+export function fileName(folderName: string, documentType: string, sequence: number, extension: string, flagged = false): string {
+	const person = studentFolder(folderName).replace(/[,[\]]/g, "").replace(/\s+/g, " ").trim();
+	if (!person) throw new LayoutError("folder_name_missing");
 	const ext = cleanName(extension).replace(/[^A-Za-z0-9]/g, "").toLowerCase() || "pdf";
-	return `${person} ${documentLabel(documentType)} #${sequence}.${ext}`;
+	return `${flagged ? FLAG_PREFIX : ""}${person} ${documentLabel(documentType)} #${sequence}.${ext}`;
 }
 
 // The folder levels under the stage folder, outermost first.

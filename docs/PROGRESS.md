@@ -299,3 +299,10 @@
 - Transient failures (network, 429, 5xx) are retryable; validation errors and a success without an ID are not.
 - No live insert yet, on purpose: reviews can't be deleted, so a probe record would stay in the audit trail. The first real one comes with the reordered consumer.
 - Full suite: 172 passing across 14 files.
+
+## 2026-11-03: [FLAGGED] file naming
+
+- `fileName` in `worker/src/layout.ts` takes an optional `flagged` flag (default false, so existing callers are unchanged) and prefixes `[FLAGGED] ` to the Drive name. The `#n` sequence is unaffected, since it comes from D1's count per application and document type.
+- Brackets are now stripped from the person's name, so only the pipeline can produce the marker: an applicant named `[FLAGGED] Shah` in Salesforce gets `FLAGGED Shah ...`, never a look-alike flag. A name that is nothing but brackets is rejected as missing.
+- Layout stays verdict-agnostic; the consumer decides which verdicts are flagged.
+- 4 new tests; full suite 176 passing across 14 files.
