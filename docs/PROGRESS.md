@@ -209,3 +209,17 @@
 - Verified live: a second Resume upload produced `job_uploaded` with sequence 2 (`Delgado Noa Resume #2.pdf`), and the audit log shows `queued` then `uploaded`.
 - Tamper test in production: `UPDATE audit_log ...` through Wrangler, with a valid token, was refused with `audit_log is append-only: SQLITE_CONSTRAINT_TRIGGER`: PASS
 - 126 tests passing (audit assertions added to existing consumer and webhook tests).
+
+## 2026-11-02: Scheduled reconciler; Phase 2 complete
+
+- Hourly cron (`17 * * * *`, off the top of the hour). `triggers.crons` confirmed in the installed Wrangler schema before use.
+- Probe first: the reconciler's query, as the pipeline user, saw 62 latest versions on 101 checklist items, matching the admin's count of 62. `-ListFiles` added to the probe script.
+- Finding: today's test uploads were new versions of one file, not new files, so the reconciler (latest version only) correctly doesn't resurrect older versions.
+- `listLatestVersions` follows `nextRecordsUrl` only if it's a same-org query path, since the bearer token goes wherever it points. Tested with another host and a non-query path. More than 50 pages is treated as an error.
+- Missing versions are queued as ordinary jobs, at most 100 per run (one `sendBatch`). Given-up versions are skipped and left for a person. Duplicates are harmless thanks to the consumer's idempotency check.
+- Reconciler jobs are audited as `queued` with reason `reconciler`, avoiding a `CHECK` change on an append-only table. Rows are written after the send, in one D1 batch.
+- First live run at 4:17 PM: found 62, already uploaded 1, given up 0, queued 61, deferred 0. All 61 uploaded on attempt 1, zero failures, in 3 minutes 47 seconds, including Friday's test file.
+- Verified in D1: 63 uploads (Noa Delgado's #1 predates the audit log, so the log shows 62), 29 folders (8 structural plus 21 students, one per application with a file), 0 failures.
+- Measured pace: about one job every 3.5 seconds, roughly 17 a minute. That's above Gemini Flash-Lite's 15 requests per minute, so Phase 3 must slow the consumer down.
+- Practice: run Wrangler from `worker/`. From the repo root, `npx` found Wrangler 4.69.0 and skipped `wrangler.jsonc`, including the pinned `account_id`.
+- Phase 2 complete: signed trigger, queue, consumer, Salesforce download, Drive upload in the original sync's layout, append-only audit trail, hourly reconciler. 133 tests passing.
