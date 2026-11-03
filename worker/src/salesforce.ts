@@ -184,3 +184,39 @@ export async function getJobDetails(
 		fileExtension: text(meta.FileExtension),
 	};
 }
+
+export interface VersionRef {
+	contentVersionId: string;
+	checklistItemId: string;
+}
+
+// Every checklist item's attached files, latest version only. The reconciler's view of what should be in Drive.
+export async function listLatestVersions(env: SalesforceEnv, token: string, fetchFn: typeof fetch = fetch): Promise<VersionRef[]> {
+	const base = baseUrl(env);
+	const soql = "SELECT Id, (SELECT ContentDocument.LatestPublishedVersionId FROM ContentDocumentLinks) FROM Checklist_Item__c";
+	let path = `/services/data/v${apiVersion(env)}/query?q=${encodeURIComponent(soql)}`;
+	const refs: VersionRef[] = [];
+
+	for (let page = 0; page < 50; page++) {
+		const result = (await getJson(fetchFn, `${base}${path}`, token, "details_rejected")) as {
+			records?: { Id?: unknown; ContentDocumentLinks?: { records?: { ContentDocument?: { LatestPublishedVersionId?: unknown } }[] } | null }[];
+			nextRecordsUrl?: unknown;
+		};
+		for (const item of result.records ?? []) {
+			for (const link of item.ContentDocumentLinks?.records ?? []) {
+				const cv = link.ContentDocument?.LatestPublishedVersionId;
+				if (typeof item.Id === "string" && typeof cv === "string") refs.push({ contentVersionId: cv, checklistItemId: item.Id });
+			}
+		}
+
+		const next = result.nextRecordsUrl;
+		if (next === undefined || next === null) return refs;
+		// The token goes wherever this points, so only a query path on the same org is followed.
+		if (typeof next !== "string" || !/^\/services\/data\/v\d+\.0\/query\/[A-Za-z0-9-]+$/.test(next)) {
+			throw new SalesforceError("details_rejected", false);
+		}
+		path = next;
+	}
+	// More than 50 pages means something is wrong, not that the org is big.
+	throw new SalesforceError("details_rejected", false);
+}

@@ -3,6 +3,8 @@ import { recordNonce, pruneNonces } from "./nonces";
 import type { IntakeJob } from "./jobs";
 import { handleMessage } from "./consumer";
 import { audit } from "./audit";
+import { reconcile } from "./reconcile";
+import { SalesforceError } from "./salesforce";
 
 export type IntakeEnv = Env & {
 	SF_SIGNING_KEY: string;
@@ -80,6 +82,21 @@ export default {
 			// Wrapped so fetch is called normally; a detached Workers fetch can throw "Illegal invocation".
 			await handleMessage(message, env, { fetch: (input, init) => fetch(input, init) });
 		}
-			}
+			},
+			async scheduled(controller, env, ctx): Promise<void> {
+		try {
+			const result = await reconcile(env, { fetch: (input, init) => fetch(input, init) });
+			console.log(JSON.stringify({ event: "reconcile_done", ...result }));
+		} catch (e) {
+			const known = e instanceof SalesforceError;
+			console.error(
+				JSON.stringify({
+					event: "reconcile_failed",
+					reason: known ? e.reason : "unexpected_error",
+					...(known ? {} : { errorName: e instanceof Error ? e.name : typeof e }),
+				}),
+			);
+		}
+	},
 
 } satisfies ExportedHandler<IntakeEnv>;

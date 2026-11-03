@@ -68,3 +68,8 @@ export async function recordUpload(db: D1Database, record: UploadRecord, now: nu
 		.bind(record.contentVersionId, record.applicationId, record.documentType, record.sequence, record.driveFileId, now)
 		.run();
 }
+
+export async function uploadedVersions(db: D1Database): Promise<Set<string>> {
+	const { results } = await db.prepare("SELECT content_version_id FROM drive_uploads").all<{ content_version_id: string }>();
+	return new Set(results.map((r) => r.content_version_id));
+}
