@@ -5,13 +5,13 @@
 #         .\scripts\Test-PipelineFileAccess.ps1 -ChecklistItemId a02...
 param(
     [string]$ContentVersionId,
-    [string]$ChecklistItemId
+    [string]$ChecklistItemId,
+    [switch]$ListFiles
 )
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"   # The progress bar can overwrite result lines.
-if (-not $ContentVersionId -and -not $ChecklistItemId) { throw "Pass -ContentVersionId, -ChecklistItemId, or both." }
-. "$PSScriptRoot\GatewayCredential.ps1"
+if (-not $ContentVersionId -and -not $ChecklistItemId -and -not $ListFiles) { throw "Pass -ContentVersionId, -ChecklistItemId and/or -ListFiles." }
 
 $project  = Get-Content "$PSScriptRoot\..\sfdx-project.json" -Raw | ConvertFrom-Json
 $api      = "v$($project.sourceApiVersion)"
@@ -78,6 +78,25 @@ if ($ChecklistItemId) {
         Invoke-Query "SELECT Application__r.Applicant__r.LastName FROM Checklist_Item__c WHERE Id = '$ChecklistItemId'" | Out-Null
         Write-Host "Contact  : REACHABLE (this should not happen)"
     } catch { Show-Failure "Contact  (expected)" }
+}
+
+if ($ListFiles) {
+    # The reconciler's query: every checklist item with the latest version of each attached file. Counts only.
+    try {
+        $soql = "SELECT Id, (SELECT ContentDocument.LatestPublishedVersionId FROM ContentDocumentLinks) FROM Checklist_Item__c"
+        $result = Invoke-Query $soql
+        $pages = 1
+        $records = @($result.records)
+        while ($result.nextRecordsUrl) {
+            $result = Invoke-RestMethod -Uri "$instance$($result.nextRecordsUrl)" -Headers $headers
+            $records += $result.records
+            $pages++
+        }
+        $withFiles = @($records | Where-Object { $_.ContentDocumentLinks })
+        $versions = @($withFiles | ForEach-Object { $_.ContentDocumentLinks.records } | ForEach-Object { $_.ContentDocument.LatestPublishedVersionId } | Sort-Object -Unique)
+        Write-Host "Files    : OK ($($records.Count) items, $($withFiles.Count) with files, $($versions.Count) latest versions, $pages page(s))"
+        Remove-Variable result, records, withFiles, versions
+    } catch { Show-Failure "Files" }
 }
 
 Remove-Variable headers
