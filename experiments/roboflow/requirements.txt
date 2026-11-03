@@ -1,0 +1,1 @@
+inference-sdk==1.8.4

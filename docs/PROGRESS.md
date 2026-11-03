@@ -345,3 +345,11 @@
 - Both backfilled files were placeholders from earlier probes (a mock CPT application and a flyer), filed on slots for other document types. Both screened `wrong_type`, correctly, with detected types "CPT Application" and "promotional flyer", and no renames needed.
 - Pacing, live: the second job arrived 6 seconds after the first, was deferred (`too_soon`, retry in 3 s) and finished on attempt 2.
 - Org check: exactly 3 `Document_Review__c` records, all filed by Intake Pipeline with `gemini-3.5-flash-lite`. The test set is untouched.
+
+## 2026-11-03: Roboflow classification experiment
+
+- Separate from the pipeline and Phase 4: `experiments/roboflow/run_eval.py` scores a Roboflow-trained classifier (DINOv3 Small, six classes) on its held-out test split through the Serverless Hosted API v2. No Worker, Salesforce, Drive or secret changes. The key lives in a gitignored `.env` and travels as an Authorization header, verified in the SDK source and a dry run.
+- Result: 11 of 12 correct, matching Roboflow's own evaluation. The one miss, `doc-0059`, a personal statement read as a recommendation letter, came with 0.66 confidence.
+- At a 0.70 threshold, 9 predictions would auto-update the checklist (all correct) and 3 would go to staff review, including the miss. The threshold was chosen on these same 12 images, so it needs validating on new documents.
+- Caveat: 12 synthetic images, a lopsided split. A working setup, not evidence of production reliability.
+- Finding: installing `inference-sdk` into the eval venv downgraded Pillow from 13.0.0 to 12.3.0, and 18 of 60 regenerated test PDFs then differed. Pillow 13 was restored (all 60 identical again), and the experiment got its own venv. The generator is reproducible from the seed _and_ Pillow 13.0.0, so that version should be pinned.
