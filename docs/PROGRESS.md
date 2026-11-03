@@ -328,3 +328,13 @@
 - Audit trail: `queued`, then `screen`/`screened` (`pass`) about 5 seconds later (the Gemini call), then `uploaded` 2 seconds after that. About 7 seconds from attach to Drive.
 - The reasons text followed the prompt's rule: no applicant name, no ID numbers.
 - Finding: wrangler D1 commands in a terminal without the intake token loaded fail with 7403 ("account not valid or not authorized"), not an auth prompt. Load `Use-IntakeCloudflare.ps1` in every terminal that talks to Cloudflare.
+
+## 2026-11-03: Screening backfill, test set held
+
+- Decision: backfill screening only for files outside the eval test set. The 60 test files stay unscreened until a deliberate Phase 4 run, so new backfill code never debuts on data that can't be rerun (reviews can't be edited or deleted).
+- `screen_holds` (migration 0006) lists versions the pipeline must not screen. `eval/hold_test_set.py` builds the holds from `load_result.json`, refusing anything but exactly 60 valid ContentVersion IDs. Loaded live; verified 60 holds, all 60 matching a file in Drive. Phase 4 releases them with one `DELETE`.
+- The consumer now finishes files filed before screening existed: if one is in Drive with no screening row and no hold, it is screened (or its existing review reused), and renamed to `[FLAGGED] ...` if flagged, keeping its number. The file never moves.
+- The screening audit row is written last, after any rename, so "screened" in the audit log means fully finished. A failed rename leaves no row, so the retry, or the next hourly run, renames it, reusing the filed verdict without screening again.
+- The reconciler queues in-Drive files that have no screening row and no hold, and reports `unscreened` and `held` counts.
+- `renameFile` in `drive.ts` (PATCH, allowed under `drive.file` for files the app created).
+- 7 new tests (5 consumer, 2 reconciler); full suite 193 passing across 14 files.
