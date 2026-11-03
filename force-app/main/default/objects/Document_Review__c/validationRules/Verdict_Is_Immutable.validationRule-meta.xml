@@ -12,7 +12,9 @@
         ISCHANGED(Model__c),
         ISCHANGED(Verdict__c),
         ISCHANGED(Reasons__c),
-        ISCHANGED(Tampering_Excerpt__c)
+        ISCHANGED(Tampering_Excerpt__c),
+        ISCHANGED(Detected_Type__c),
+        ISCHANGED(Screen_Failure__c)
     )
 )</errorConditionFormula>
     <errorMessage
