@@ -362,3 +362,9 @@
 - Finding: the claude.ai connector caches a server's tool list. New tools appeared only after disconnecting and reconnecting the connector, not in a new chat alone.
 - Small follow-up: define "flagged" (tampering_suspected only) in the list tool's description; the demo agent applied the word to wrong_type reviews.
 - Next: Phase 4, the held-out test set run.
+
+## 2026-11-03: Phase 4 freeze
+
+- Screener spec frozen: `worker/src/screener-spec.json`, SHA-256 `ceca6820b81ff41f07bbd4637d8e272bd1bd6838386aa041dce8c09ef6a927e2`, last changed in `cd593c9` (Nov 2). Model `gemini-3.5-flash-lite`. Tagged `phase4-freeze`.
+- Scoring written and committed before release: `eval/score_phase4.py` joins the answer key, `load_result.json` and the live `Document_Review__c` records. It reports verdict accuracy, injections caught by style (with exact-excerpt checks), unsafe passes, false tampering flags, clean documents held back, prompt leaks, name echoes, fail-closed answers, a confusion matrix and every wrong verdict. Tested on stand-in data covering each failure type; a dry run against the org found 0 of 60 reviews, correct while held.
+- Found before release: the reconciler sent its whole batch at once, so all but one job hit the pacing gap, retried together and collided again, each retry spending a queue attempt (about 6 documents an hour). It now staggers sends by 10 seconds (the 8-second gap plus margin), so the 60 should finish in one run of about 10 minutes. 1 new test; 194 passing.

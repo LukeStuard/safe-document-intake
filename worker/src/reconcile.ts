@@ -3,9 +3,14 @@ import { uploadedVersions } from "./store";
 import { auditMany, givenUpVersions, screenedVersions } from "./audit";
 import { heldVersions } from "./holds";
 import { parseJob, type IntakeJob } from "./jobs";
+import { MIN_GAP_SECONDS } from "./pacing";
 
 // Also the most messages one sendBatch call accepts. Anything beyond waits for the next run.
 export const MAX_PER_RUN = 100;
+
+// Queued jobs are spread out so they reach the screener about one pacing gap apart. Sent all at once, every job but
+// one would hit the gap, retry together and collide again, spending a queue attempt each time.
+export const STAGGER_SECONDS = MIN_GAP_SECONDS + 2;
 
 export type ReconcileEnv = SalesforceEnv & { AUDIT_DB: D1Database; INTAKE_QUEUE: Queue };
 
@@ -67,7 +72,7 @@ export async function reconcile(
 
 	const batch = missing.slice(0, MAX_PER_RUN);
 	if (batch.length > 0) {
-		await env.INTAKE_QUEUE.sendBatch(batch.map((body) => ({ body })));
+		await env.INTAKE_QUEUE.sendBatch(batch.map((body, i) => ({ body, delaySeconds: i * STAGGER_SECONDS })));
 		// Recorded after sending, so a "queued" row always means the job really was queued.
 		await auditMany(
 			env.AUDIT_DB,
