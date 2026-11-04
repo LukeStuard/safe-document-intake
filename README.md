@@ -42,18 +42,17 @@ flowchart TD
         A["File attached to a checklist item<br/>(Salesforce)"] -->|signed request| B["Worker: verify, enqueue"]
         B --> C["Queue"]
         C --> D["Consumer"]
-        D -->|"document, filed type, name only (paced)"| G["Gemini first-pass screen"]
-        G -->|verdict| D
-        D -->|"1. record verdict"| R["Document_Review__c<br/>(Salesforce)"]
-        D -->|"2. then file it, [FLAGGED] if tampered"| DR["Google Drive"]
+        D <-->|"document, filed type, name only (paced)"| G["Gemini first-pass screen"]
+        D -->|"filed after the verdict, [FLAGGED] if tampered"| DR["Google Drive"]
         D -.->|every step| L[("D1 audit log")]
     end
     subgraph review["Human review"]
         H["Staff reviewer"] -->|asks| CL["Claude in claude.ai"]
         CL -->|read-only tools| GW["Safe Agent Gateway"]
-        GW --> R
-        H -->|decides| R
     end
+    D -->|verdict, recorded first| R["Document_Review__c in Salesforce<br/>verdict proposed, decision Pending"]
+    GW -->|reads| R
+    H -->|decides| R
 ```
 
 1. **Trigger.** Attaching a file to a checklist item fires an Apex trigger that sends a signed request (HMAC-SHA256, timestamp, single-use nonce) to the Worker. Unsigned, stale or replayed requests get a bare 401.
