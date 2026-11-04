@@ -37,19 +37,23 @@ Full report: [`eval/results/phase4/summary.md`](eval/results/phase4/summary.md),
 ## How it works
 
 ```mermaid
-flowchart LR
-    A[File attached to a<br/>checklist item<br/>in Salesforce] -->|signed request| B[Cloudflare Worker<br/>verify, enqueue]
-    B --> C[Queue]
-    C --> D[Consumer]
-    D -->|download as<br/>pipeline user| SF[(Salesforce)]
-    D -->|document + type + name only,<br/>paced| G[Gemini<br/>first-pass screen]
-    D -->|verdict| R[Document_Review__c<br/>in Salesforce]
-    D -->|then file it,<br/>FLAGGED if tampered| DR[Google Drive]
-    D --> L[(D1 audit log)]
-    H[Staff reviewer] --> CL[Claude in claude.ai]
-    CL -->|read-only tools| GW[Safe Agent Gateway]
-    GW --> R
-    H -->|decides| R
+flowchart TD
+    subgraph pipeline["Automated pipeline"]
+        A["File attached to a checklist item<br/>(Salesforce)"] -->|signed request| B["Worker: verify, enqueue"]
+        B --> C["Queue"]
+        C --> D["Consumer"]
+        D -->|"document, filed type, name only (paced)"| G["Gemini first-pass screen"]
+        G -->|verdict| D
+        D -->|"1. record verdict"| R["Document_Review__c<br/>(Salesforce)"]
+        D -->|"2. then file it, [FLAGGED] if tampered"| DR["Google Drive"]
+        D -.->|every step| L[("D1 audit log")]
+    end
+    subgraph review["Human review"]
+        H["Staff reviewer"] -->|asks| CL["Claude in claude.ai"]
+        CL -->|read-only tools| GW["Safe Agent Gateway"]
+        GW --> R
+        H -->|decides| R
+    end
 ```
 
 1. **Trigger.** Attaching a file to a checklist item fires an Apex trigger that sends a signed request (HMAC-SHA256, timestamp, single-use nonce) to the Worker. Unsigned, stale or replayed requests get a bare 401.
