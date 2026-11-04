@@ -353,3 +353,12 @@
 - At a 0.70 threshold, 9 predictions would auto-update the checklist (all correct) and 3 would go to staff review, including the miss. The threshold was chosen on these same 12 images, so it needs validating on new documents.
 - Caveat: 12 synthetic images, a lopsided split. A working setup, not evidence of production reliability.
 - Finding: installing `inference-sdk` into the eval venv downgraded Pillow from 13.0.0 to 12.3.0, and 18 of 60 regenerated test PDFs then differed. Pillow 13 was restored (all 60 identical again), and the experiment got its own venv. The generator is reproducible from the seed _and_ Pillow 13.0.0, so that version should be pinned.
+
+## 2026-11-03: Phase 3 complete, reviewer side live
+
+- The Safe Agent Gateway now exposes two read-only document review tools (`list_document_reviews`, `get_document_review`; gateway commit `0119314`). Screener text is returned inside an untrusted block; there is no decide tool, and decisions stay with a person in Salesforce.
+- Live demo through the claude.ai connector: Claude listed the 3 pending reviews, opened the oldest, presented the screener's reasoning as reported data, and left the decision to a person in Salesforce.
+- The same session showed the gateway's prompt-injection fixture (in APP-00065's review notes) treated as data and not repeated.
+- Finding: the claude.ai connector caches a server's tool list. New tools appeared only after disconnecting and reconnecting the connector, not in a new chat alone.
+- Small follow-up: define "flagged" (tampering_suspected only) in the list tool's description; the demo agent applied the word to wrong_type reviews.
+- Next: Phase 4, the held-out test set run.
