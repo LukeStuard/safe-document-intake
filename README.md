@@ -124,7 +124,11 @@ docs/                 Project brief, build log (PROGRESS-intake.md), evidence sc
 ## What it doesn't do (yet)
 
 - **Screening is PDF-only.** Any other file is still filed, with a `needs_human` review marked `unsupported_format` and no model call. What .docx screening would take is below.
-- **One model.** The brief planned a head-to-head with Workers AI and a spot check with a larger Gemini model; neither ran. Both are natural next steps.
+- **One model.** The brief planned two comparisons, and neither ran. They fell out of the build plan rather than being cut on purpose; they're listed here so that's visible.
+  - **A Workers AI head-to-head.** Workers AI models don't read PDFs, so it needs text extraction plus a vision model for scanned pages, and the free allocation covers roughly 55 documents a day. It's the comparison worth reviving: whether a text-extraction path catches hidden-text injections (1-point, white, metadata) that a visual reader misses, or the reverse.
+  - **A larger-model spot check** with Gemini 3.8 Flash (20 free requests a day). With Flash Lite at 60 of 60, there was nothing left for it to catch on this test set; it belongs with harder documents.
+- **One run, so no variance estimate.** On the dev set, two clean documents were flagged `name_mismatch` on some reruns and not others. Reviews can't be redone by design, which made a single test run the only option; reporting ranges would need a separate harness that can rerun.
+- **Drive is the only storage.** The brief planned an R2 adapter so the project could run without a Google account. It was deferred: it's a refactor with no new finding, and enabling R2 requires a payment method on the Cloudflare account even for its free tier.
 - **Harder attacks.** The injections tested are direct. Paraphrased, multilingual, or split-across-pages attempts are the next meaningful test.
 - **PDF metadata in compressed streams** isn't read; only the uncompressed Info dictionary is passed to the model.
 - **Known gap:** if Drive accepts a file and the D1 record then fails, the retry uploads a second copy. Rare and visible; the file's private `appProperties` tag is the hook for a fix.
